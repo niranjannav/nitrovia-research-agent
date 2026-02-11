@@ -1,6 +1,13 @@
 import { create } from 'zustand'
 import { reportService } from '../services/reportService'
-import type { Report, ReportConfig, OutputFormat, DetailLevel } from '../types/report'
+import type {
+  Report,
+  ReportConfig,
+  OutputFormat,
+  DetailLevel,
+  GeneratedContent,
+  EditHistoryEntry,
+} from '../types/report'
 import type { SourceFile } from '../types/file'
 
 interface ReportState {
@@ -32,6 +39,12 @@ interface ReportState {
   isLoading: boolean
   error: string | null
 
+  // Editor state
+  generatedContent: GeneratedContent | null
+  selectedSectionPath: string | null
+  editHistory: EditHistoryEntry[]
+  isEditing: boolean
+
   // Actions
   addFile: (file: SourceFile) => void
   removeFile: (fileId: string) => void
@@ -46,6 +59,13 @@ interface ReportState {
   fetchReports: (page?: number) => Promise<void>
   deleteReport: (reportId: string) => Promise<void>
   clearError: () => void
+
+  // Editor actions
+  loadGeneratedContent: (reportId: string) => Promise<void>
+  selectSection: (sectionPath: string | null) => void
+  editSection: (instructions: string) => Promise<void>
+  undoEdit: (historyIndex: number) => void
+  clearEditorState: () => void
 }
 
 const defaultConfig = {
@@ -70,6 +90,12 @@ export const useReportStore = create<ReportState>((set, get) => ({
   currentPage: 1,
   isLoading: false,
   error: null,
+
+  // Editor state
+  generatedContent: null,
+  selectedSectionPath: null,
+  editHistory: [],
+  isEditing: false,
 
   addFile: (file) => {
     set((state) => ({
@@ -242,4 +268,85 @@ export const useReportStore = create<ReportState>((set, get) => ({
   },
 
   clearError: () => set({ error: null }),
+
+  // Editor actions
+  loadGeneratedContent: async (reportId: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const content = await reportService.getGeneratedContent(reportId)
+      set({
+        generatedContent: content,
+        currentReportId: reportId,
+        isLoading: false,
+      })
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to load content',
+        isLoading: false,
+      })
+    }
+  },
+
+  selectSection: (sectionPath: string | null) => {
+    set({ selectedSectionPath: sectionPath })
+  },
+
+  editSection: async (instructions: string) => {
+    const { currentReportId, selectedSectionPath, generatedContent } = get()
+
+    if (!currentReportId || !selectedSectionPath || !generatedContent) {
+      throw new Error('No section selected')
+    }
+
+    set({ isEditing: true, error: null })
+
+    try {
+      const response = await reportService.editSection(
+        currentReportId,
+        selectedSectionPath,
+        instructions
+      )
+
+      // Add to history
+      const historyEntry: EditHistoryEntry = {
+        sectionPath: response.section_path,
+        sectionTitle: selectedSectionPath,
+        oldContent: response.old_content,
+        newContent: response.new_content,
+        appliedAt: response.applied_at,
+      }
+
+      // Reload the generated content to get the updated version
+      const updatedContent = await reportService.getGeneratedContent(currentReportId)
+
+      set((state) => ({
+        generatedContent: updatedContent,
+        editHistory: [historyEntry, ...state.editHistory],
+        isEditing: false,
+      }))
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to edit section',
+        isEditing: false,
+      })
+      throw error
+    }
+  },
+
+  undoEdit: (historyIndex: number) => {
+    // Note: Full undo would require backend support
+    // For now, just remove from history display
+    set((state) => ({
+      editHistory: state.editHistory.filter((_, i) => i !== historyIndex),
+    }))
+  },
+
+  clearEditorState: () => {
+    set({
+      generatedContent: null,
+      selectedSectionPath: null,
+      editHistory: [],
+      isEditing: false,
+    })
+  },
 }))

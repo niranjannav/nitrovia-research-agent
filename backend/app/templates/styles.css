@@ -1,0 +1,142 @@
+/* Report PDF Styles */
+@page {
+    size: A4;
+    margin: 2cm;
+    @bottom-center {
+        content: counter(page);
+        font-size: 10pt;
+        color: #666;
+    }
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #333;
+    max-width: 100%;
+}
+
+.report-header {
+    text-align: center;
+    margin-bottom: 2cm;
+    padding-bottom: 1cm;
+    border-bottom: 3px solid #2563eb;
+}
+
+.report-header h1 {
+    font-size: 24pt;
+    color: #1a1a1a;
+    margin: 0;
+    font-weight: 600;
+}
+
+h2 {
+    font-size: 16pt;
+    color: #2563eb;
+    margin-top: 1.5cm;
+    margin-bottom: 0.5cm;
+    padding-bottom: 0.3cm;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+h3 {
+    font-size: 13pt;
+    color: #374151;
+    margin-top: 1cm;
+    margin-bottom: 0.3cm;
+}
+
+.executive-summary {
+    background-color: #f8fafc;
+    padding: 1cm;
+    border-radius: 0.3cm;
+    margin-bottom: 1cm;
+}
+
+.executive-summary h2 {
+    margin-top: 0;
+    color: #1e40af;
+}
+
+.summary-content {
+    font-size: 11pt;
+}
+
+.report-section {
+    page-break-inside: avoid;
+}
+
+.section-content,
+.subsection-content {
+    text-align: justify;
+    margin-bottom: 0.5cm;
+}
+
+.subsection {
+    margin-left: 0.5cm;
+    padding-left: 0.5cm;
+    border-left: 2px solid #e5e7eb;
+}
+
+.key-findings,
+.recommendations {
+    background-color: #f0f9ff;
+    padding: 1cm;
+    border-radius: 0.3cm;
+    margin-top: 1cm;
+}
+
+.key-findings h2 {
+    color: #0369a1;
+    margin-top: 0;
+}
+
+.recommendations h2 {
+    color: #047857;
+    margin-top: 0;
+}
+
+ul {
+    margin: 0;
+    padding-left: 1cm;
+}
+
+li {
+    margin-bottom: 0.3cm;
+}
+
+.key-findings li::marker {
+    color: #0369a1;
+}
+
+.recommendations li::marker {
+    color: #047857;
+}
+
+.sources {
+    margin-top: 1cm;
+    padding-top: 0.5cm;
+    border-top: 1px solid #e5e7eb;
+}
+
+.sources h2 {
+    font-size: 12pt;
+    color: #6b7280;
+}
+
+.sources li {
+    font-size: 10pt;
+    color: #6b7280;
+}
+
+footer {
+    margin-top: 2cm;
+    text-align: center;
+    font-size: 9pt;
+    color: #9ca3af;
+}

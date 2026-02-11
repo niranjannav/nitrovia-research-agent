@@ -7,13 +7,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.utils.logging import setup_logging
 
-# Configure logging
+# Configure logging with file output
 settings = get_settings()
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper()),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+setup_logging(level=settings.log_level)
 logger = logging.getLogger(__name__)
 
 

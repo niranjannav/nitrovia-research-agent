@@ -1,22 +1,122 @@
-"""LLM service for generating reports and presentations using Claude."""
+"""LLM service for generating reports and presentations.
 
-import json
+This module provides a facade for LLM operations using pydantic-ai with LiteLLM.
+Uses pydantic-ai for guaranteed schema compliance across all providers.
+
+The edit_section method is still actively used by the API for editing
+individual report sections.
+"""
+
 import logging
-from typing import Any
+from pathlib import Path
+from typing import TypeVar
 
-from anthropic import Anthropic
+from pydantic import BaseModel
+from pydantic_ai import Agent
+from pydantic_ai_litellm import LiteLLMModel
 
-from app.models.schemas import GeneratedPresentation, GeneratedReport, ReportSection
+from app.models.llm_outputs import (
+    LLMGeneratedPresentation,
+    LLMGeneratedReport,
+)
+from app.models.schemas import (
+    GeneratedPresentation,
+    GeneratedReport,
+    PresentationSlide,
+    ReportSection,
+)
 
 logger = logging.getLogger(__name__)
 
+# Prompts directory
+PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
+
+# Type variable for generic structured output
+T = TypeVar("T", bound=BaseModel)
+
+
+def load_prompt(name: str) -> str:
+    """
+    Load a prompt template from the prompts directory.
+
+    Args:
+        name: Prompt file name (without .txt extension)
+
+    Returns:
+        Prompt template string
+
+    Raises:
+        FileNotFoundError: If prompt file doesn't exist
+    """
+    prompt_file = PROMPTS_DIR / f"{name}.txt"
+    if not prompt_file.exists():
+        raise FileNotFoundError(f"Prompt not found: {prompt_file}")
+    logger.info(f"[LLM] Loaded prompt: {name}")
+    return prompt_file.read_text(encoding="utf-8")
+
+
+def get_detail_guidance(detail_level: str) -> str:
+    """
+    Get the detail guidance for a specific level.
+
+    Args:
+        detail_level: "executive", "standard", or "comprehensive"
+
+    Returns:
+        Detail guidance text
+    """
+    try:
+        detail_content = load_prompt("detail_levels")
+        # Parse the markdown-style sections
+        sections = detail_content.split("## ")
+        for section in sections:
+            if section.startswith(detail_level):
+                # Return everything after the first line (the level name)
+                lines = section.strip().split("\n", 1)
+                if len(lines) > 1:
+                    return lines[1].strip()
+    except Exception as e:
+        logger.warning(f"Failed to load detail guidance: {e}")
+
+    # Fallback guidance
+    fallbacks = {
+        "executive": "Create a concise executive summary report (1-2 pages equivalent). Focus on key takeaways and actionable recommendations.",
+        "standard": "Create a balanced report (3-5 pages equivalent). Include executive summary, analysis, and recommendations.",
+        "comprehensive": "Create an in-depth analytical report (5-10 pages equivalent). Provide thorough analysis with detailed findings.",
+    }
+    return fallbacks.get(detail_level, fallbacks["standard"])
+
 
 class LLMService:
-    """Service for interacting with Claude API for content generation."""
+    """Service for generating reports and presentations.
 
-    def __init__(self, api_key: str):
-        """Initialize with Anthropic API key."""
-        self.client = Anthropic(api_key=api_key)
+    Uses pydantic-ai with LiteLLM for guaranteed schema compliance
+    across all providers without provider-specific code.
+    """
+
+    # Default model for generation
+    DEFAULT_MODEL = "anthropic/claude-sonnet-4-20250514"
+
+    def __init__(self, api_key: str, provider: str = "anthropic"):
+        """Initialize LLM service.
+
+        Args:
+            api_key: API key for the LLM provider
+            provider: Provider name ("anthropic" or "openai")
+        """
+        import os
+
+        # Set API key in environment for LiteLLM
+        if provider == "anthropic":
+            os.environ["ANTHROPIC_API_KEY"] = api_key
+            self.model_string = "anthropic/claude-sonnet-4-20250514"
+        elif provider == "openai":
+            os.environ["OPENAI_API_KEY"] = api_key
+            self.model_string = "openai/gpt-4o"
+        else:
+            raise ValueError(f"Unsupported LLM provider: {provider}")
+
+        self.model = LiteLLMModel(self.model_string)
 
     def generate_report(
         self,
@@ -28,6 +128,8 @@ class LLMService:
         """
         Generate a structured report from document context.
 
+        Uses pydantic-ai for guaranteed schema compliance.
+
         Args:
             context: Combined document content
             custom_instructions: User-provided instructions
@@ -37,149 +139,86 @@ class LLMService:
         Returns:
             GeneratedReport with structured content
         """
-        detail_guidance = {
-            "executive": """Create a concise executive summary report (1-2 pages equivalent).
-Focus on:
-- High-level insights and key takeaways
-- Critical findings that require attention
-- Actionable recommendations
-Keep sections brief and impactful.""",
-            "standard": """Create a balanced report (3-5 pages equivalent).
-Include:
-- Executive summary
-- Detailed analysis of key topics
-- Supporting evidence and data
-- Clear recommendations with rationale""",
-            "comprehensive": """Create an in-depth analytical report (5-10 pages equivalent).
-Provide:
-- Thorough executive summary
-- Comprehensive analysis of all topics
-- Detailed findings with full supporting evidence
-- Multiple recommendations with implementation considerations
-- Context and background where relevant""",
-        }
+        # Load prompt template
+        try:
+            prompt_template = load_prompt("report_generation")
+        except FileNotFoundError:
+            logger.warning("Report generation prompt not found, using fallback")
+            prompt_template = self._get_fallback_report_prompt()
 
-        system_prompt = f"""You are an expert research analyst and report writer.
+        # Get detail guidance
+        detail_guidance = get_detail_guidance(detail_level)
 
-Your task is to synthesize the provided source documents into a well-structured, professional report.
+        # Build system prompt
+        system_prompt = prompt_template.format(
+            detail_level=detail_level.upper(),
+            detail_guidance=detail_guidance,
+        )
 
-DETAIL LEVEL: {detail_level.upper()}
-{detail_guidance.get(detail_level, detail_guidance["standard"])}
-
-OUTPUT FORMAT: You must respond with ONLY valid JSON matching this exact structure:
-{{
-    "title": "Report Title",
-    "executive_summary": "2-3 paragraph executive summary",
-    "sections": [
-        {{
-            "title": "Section Title",
-            "content": "Section content with full paragraphs. Use complete sentences and professional language.",
-            "subsections": [
-                {{
-                    "title": "Subsection Title",
-                    "content": "Subsection content",
-                    "subsections": []
-                }}
-            ]
-        }}
-    ],
-    "key_findings": [
-        "Key finding 1 - specific and actionable",
-        "Key finding 2 - with supporting context"
-    ],
-    "recommendations": [
-        "Recommendation 1 - clear and implementable",
-        "Recommendation 2 - with expected impact"
-    ],
-    "sources": [
-        "Source document 1 name",
-        "Source document 2 name"
-    ]
-}}
-
-CRITICAL REQUIREMENTS:
-1. Write in professional, clear prose
-2. Support all claims with evidence from the source documents
-3. Maintain objectivity - present facts, not opinions unless clearly labeled
-4. Structure content logically with clear transitions
-5. Cite sources when referencing specific information
-6. Return ONLY the JSON object, no additional text or markdown"""
-
+        # Build user content
         user_content = ""
         if custom_instructions:
-            user_content += f"""USER INSTRUCTIONS:
-{custom_instructions}
-
-"""
+            user_content += f"USER INSTRUCTIONS:\n{custom_instructions}\n\n"
 
         if title_hint:
-            user_content += f"""SUGGESTED TITLE: {title_hint}
+            user_content += f"SUGGESTED TITLE: {title_hint}\n\n"
 
-"""
-
-        user_content += f"""SOURCE DOCUMENTS:
-{context}
-
-Generate the report now. Remember to output ONLY valid JSON."""
+        user_content += f"SOURCE DOCUMENTS:\n{context}\n\nGenerate the report now."
 
         try:
-            response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=8000,
-                messages=[{"role": "user", "content": user_content}],
-                system=system_prompt,
+            logger.info(f"[LLM] Generating report | detail_level={detail_level}")
+
+            # Create pydantic-ai agent with the output schema
+            agent = Agent(
+                self.model,
+                output_type=LLMGeneratedReport,
+                system_prompt=system_prompt,
             )
 
-            # Parse JSON response
-            response_text = response.content[0].text.strip()
+            # Run synchronously
+            result = agent.run_sync(user_content)
+            llm_report = result.output
 
-            # Handle potential markdown code blocks
-            if response_text.startswith("```"):
-                # Extract JSON from code block
-                lines = response_text.split("\n")
-                json_lines = []
-                in_json = False
-                for line in lines:
-                    if line.startswith("```") and not in_json:
-                        in_json = True
-                        continue
-                    elif line.startswith("```") and in_json:
-                        break
-                    elif in_json:
-                        json_lines.append(line)
-                response_text = "\n".join(json_lines)
-
-            report_data = json.loads(response_text)
-
-            # Convert to Pydantic model
-            return GeneratedReport(
-                title=report_data.get("title", "Research Report"),
-                executive_summary=report_data.get("executive_summary", ""),
-                sections=[
-                    self._parse_section(s) for s in report_data.get("sections", [])
-                ],
-                key_findings=report_data.get("key_findings", []),
-                recommendations=report_data.get("recommendations", []),
-                sources=report_data.get("sources", []),
+            # Log content stats for debugging
+            logger.info(
+                f"[LLM] Report generated | title={llm_report.title} | "
+                f"sections={len(llm_report.sections)} | "
+                f"findings={len(llm_report.key_findings)} | "
+                f"recommendations={len(llm_report.recommendations)}"
             )
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLM response as JSON: {e}")
-            logger.error(f"Response was: {response_text[:500]}...")
-            raise ValueError("LLM returned invalid JSON response")
+            # Convert to API schema model for backwards compatibility
+            return self._convert_llm_report_to_schema(llm_report)
+
         except Exception as e:
-            logger.error(f"Report generation failed: {e}")
+            logger.error(f"[LLM] Report generation failed: {e}")
             raise
 
-    def _parse_section(self, section_data: dict) -> ReportSection:
-        """Parse a section dict into ReportSection model."""
-        return ReportSection(
-            title=section_data.get("title", ""),
-            content=section_data.get("content", ""),
-            subsections=[
-                self._parse_section(s)
-                for s in section_data.get("subsections", [])
+    def _convert_llm_report_to_schema(
+        self, llm_report: LLMGeneratedReport
+    ) -> GeneratedReport:
+        """Convert LLM output model to API schema model."""
+        return GeneratedReport(
+            title=llm_report.title,
+            executive_summary=llm_report.executive_summary,
+            sections=[
+                ReportSection(
+                    title=s.title,
+                    content=s.content,
+                    subsections=[
+                        ReportSection(
+                            title=sub.title,
+                            content=sub.content,
+                            subsections=[],  # Flat structure for LLM outputs
+                        )
+                        for sub in s.subsections
+                    ],
+                )
+                for s in llm_report.sections
             ],
+            key_findings=llm_report.key_findings,
+            recommendations=llm_report.recommendations,
+            sources=llm_report.sources,
         )
 
     def generate_presentation(
@@ -191,6 +230,8 @@ Generate the report now. Remember to output ONLY valid JSON."""
         """
         Generate a presentation from a report.
 
+        Uses pydantic-ai for guaranteed schema compliance.
+
         Args:
             report: Generated report to convert
             slide_count_min: Minimum number of slides
@@ -199,67 +240,17 @@ Generate the report now. Remember to output ONLY valid JSON."""
         Returns:
             GeneratedPresentation with slide structure
         """
-        system_prompt = f"""You are an expert presentation designer.
+        # Load prompt template
+        try:
+            prompt_template = load_prompt("presentation_generation")
+        except FileNotFoundError:
+            logger.warning("Presentation prompt not found, using fallback")
+            prompt_template = self._get_fallback_presentation_prompt()
 
-Convert the provided report into a compelling, professional presentation.
-
-SLIDE COUNT: Create between {slide_count_min} and {slide_count_max} slides.
-
-OUTPUT FORMAT: Respond with ONLY valid JSON matching this structure:
-{{
-    "title": "Presentation Title",
-    "slides": [
-        {{
-            "type": "title",
-            "title": "Main Presentation Title",
-            "subtitle": "Subtitle or date"
-        }},
-        {{
-            "type": "section",
-            "title": "Section Divider Title"
-        }},
-        {{
-            "type": "content",
-            "title": "Slide Title",
-            "bullets": ["Point 1", "Point 2", "Point 3"],
-            "notes": "Speaker notes for this slide"
-        }},
-        {{
-            "type": "key_findings",
-            "title": "Key Findings",
-            "findings": ["Finding 1", "Finding 2", "Finding 3"]
-        }},
-        {{
-            "type": "recommendations",
-            "title": "Recommendations",
-            "items": ["Recommendation 1", "Recommendation 2"]
-        }},
-        {{
-            "type": "closing",
-            "title": "Thank You",
-            "contact": "Contact information or next steps"
-        }}
-    ]
-}}
-
-SLIDE TYPES:
-- "title": Opening slide with main title and subtitle
-- "section": Section divider slide
-- "content": Main content slide with bullet points (max 6 bullets per slide)
-- "key_findings": Highlight key findings
-- "recommendations": Present recommendations
-- "closing": Final slide
-
-GUIDELINES:
-1. Start with a title slide
-2. Use section dividers to organize major topics
-3. Keep bullet points concise (1-2 lines each)
-4. Maximum 6 bullet points per content slide
-5. Include speaker notes with additional context
-6. End with recommendations and a closing slide
-7. Make content visually digestible - avoid text overload
-
-Return ONLY the JSON object."""
+        system_prompt = prompt_template.format(
+            slide_count_min=slide_count_min,
+            slide_count_max=slide_count_max,
+        )
 
         # Format report content for LLM
         sections_text = ""
@@ -284,52 +275,135 @@ KEY FINDINGS:
 RECOMMENDATIONS:
 {chr(10).join(f'- {r}' for r in report.recommendations)}
 
-Generate the presentation slides now. Return ONLY valid JSON."""
+Generate the presentation slides now."""
 
         try:
-            response = self.client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4000,
-                messages=[{"role": "user", "content": user_content}],
-                system=system_prompt,
+            logger.info(
+                f"[LLM] Generating presentation | slides={slide_count_min}-{slide_count_max}"
             )
 
-            response_text = response.content[0].text.strip()
-
-            # Handle potential markdown code blocks
-            if response_text.startswith("```"):
-                lines = response_text.split("\n")
-                json_lines = []
-                in_json = False
-                for line in lines:
-                    if line.startswith("```") and not in_json:
-                        in_json = True
-                        continue
-                    elif line.startswith("```") and in_json:
-                        break
-                    elif in_json:
-                        json_lines.append(line)
-                response_text = "\n".join(json_lines)
-
-            pres_data = json.loads(response_text)
-
-            return GeneratedPresentation(
-                title=pres_data.get("title", report.title),
-                slides=pres_data.get("slides", []),
+            # Create pydantic-ai agent with the output schema
+            agent = Agent(
+                self.model,
+                output_type=LLMGeneratedPresentation,
+                system_prompt=system_prompt,
             )
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse presentation JSON: {e}")
-            raise ValueError("LLM returned invalid JSON for presentation")
+            # Run synchronously
+            result = agent.run_sync(user_content)
+            llm_presentation = result.output
+
+            logger.info(
+                f"[LLM] Presentation generated | slides={len(llm_presentation.slides)}"
+            )
+
+            # Convert to API schema model
+            return self._convert_llm_presentation_to_schema(llm_presentation)
+
         except Exception as e:
-            logger.error(f"Presentation generation failed: {e}")
+            logger.error(f"[LLM] Presentation generation failed: {e}")
             raise
 
-    def get_token_usage(self, response: Any) -> tuple[int, int]:
-        """Extract input and output token counts from response."""
-        if hasattr(response, "usage"):
-            return (
-                getattr(response.usage, "input_tokens", 0),
-                getattr(response.usage, "output_tokens", 0),
+    def _convert_llm_presentation_to_schema(
+        self, llm_pres: LLMGeneratedPresentation
+    ) -> GeneratedPresentation:
+        """Convert LLM output model to API schema model."""
+        return GeneratedPresentation(
+            title=llm_pres.title,
+            slides=[
+                PresentationSlide(
+                    type=slide.type,
+                    title=slide.title,
+                    subtitle=slide.subtitle,
+                    bullets=slide.bullets,
+                    findings=slide.findings,
+                    items=slide.items,
+                    contact=slide.contact,
+                    notes=slide.notes,
+                )
+                for slide in llm_pres.slides
+            ],
+        )
+
+    def edit_section(
+        self,
+        section_title: str,
+        section_content: str,
+        user_instructions: str,
+        report_context: str,
+    ) -> str:
+        """
+        Edit a single section of a report based on user instructions.
+
+        Args:
+            section_title: Title of the section being edited
+            section_content: Current content of the section
+            user_instructions: User's edit request
+            report_context: Summary of the full report for context
+
+        Returns:
+            Updated section content as plain text
+        """
+        # Load prompt template
+        try:
+            prompt_template = load_prompt("section_edit")
+        except FileNotFoundError:
+            logger.warning("Section edit prompt not found, using fallback")
+            prompt_template = self._get_fallback_section_edit_prompt()
+
+        prompt = prompt_template.format(
+            section_title=section_title,
+            section_content=section_content,
+            user_instructions=user_instructions,
+            report_context=report_context[:3000],  # Truncate for context window
+        )
+
+        try:
+            logger.info(f"[LLM] Editing section | title={section_title}")
+
+            # For plain text generation, use a simple agent without output_type
+            agent = Agent(
+                self.model,
+                system_prompt="You are a professional report editor. Return ONLY the updated section content, no additional text or formatting.",
             )
-        return 0, 0
+
+            result = agent.run_sync(prompt)
+            new_content = result.output.strip()
+
+            logger.info(f"[LLM] Section edited | chars={len(new_content)}")
+            return new_content
+
+        except Exception as e:
+            logger.error(f"[LLM] Section edit failed: {e}")
+            raise
+
+    def _get_fallback_report_prompt(self) -> str:
+        """Fallback prompt if file not found."""
+        return """You are an expert research analyst. Create a professional report.
+
+DETAIL LEVEL: {detail_level}
+{detail_guidance}
+
+Create a comprehensive report with an executive summary (2-3 paragraphs),
+detailed sections with substantive content, at least 2 key findings,
+and at least 1 actionable recommendation."""
+
+    def _get_fallback_presentation_prompt(self) -> str:
+        """Fallback prompt if file not found."""
+        return """Create a presentation with {slide_count_min} to {slide_count_max} slides.
+
+Include a title slide, content slides with bullet points, key findings,
+recommendations, and a closing slide."""
+
+    def _get_fallback_section_edit_prompt(self) -> str:
+        """Fallback prompt if file not found."""
+        return """Edit this section based on user instructions:
+
+Section: {section_title}
+Content: {section_content}
+
+User request: {user_instructions}
+
+Context: {report_context}
+
+Return ONLY the updated section content."""

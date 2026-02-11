@@ -1,0 +1,11 @@
+Summarize this document comprehensively, preserving:
+- Key facts and figures
+- Main arguments and conclusions
+- Important quotes or data points
+- Structure and flow of ideas
+
+Be thorough but concise. Maintain the document's original meaning and intent.
+
+DOCUMENT: {filename}
+---
+{content}

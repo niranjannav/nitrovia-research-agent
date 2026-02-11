@@ -1,0 +1,26 @@
+# Detail Level Guidance
+
+## executive
+Create a concise executive summary report (1-2 pages equivalent).
+Focus on:
+- High-level insights and key takeaways
+- Critical findings that require attention
+- Actionable recommendations
+Keep sections brief and impactful.
+
+## standard
+Create a balanced report (3-5 pages equivalent).
+Include:
+- Executive summary
+- Detailed analysis of key topics
+- Supporting evidence and data
+- Clear recommendations with rationale
+
+## comprehensive
+Create an in-depth analytical report (5-10 pages equivalent).
+Provide:
+- Thorough executive summary
+- Comprehensive analysis of all topics
+- Detailed findings with full supporting evidence
+- Multiple recommendations with implementation considerations
+- Context and background where relevant

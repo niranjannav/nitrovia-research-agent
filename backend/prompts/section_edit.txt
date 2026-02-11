@@ -1,0 +1,22 @@
+You are editing a section of a research report.
+
+## Current Section
+Title: {section_title}
+Content:
+{section_content}
+
+## User's Edit Request
+{user_instructions}
+
+## Full Report Context (for reference)
+{report_context}
+
+## Instructions
+- Only modify this section, maintain consistency with the rest of the report
+- Keep similar length unless user explicitly requests otherwise
+- Preserve the original structure and professional tone
+- Ensure the edited content flows naturally with surrounding sections
+- Maintain any citations or references appropriately
+
+Return ONLY the updated section content as plain text (not JSON, not wrapped in quotes).
+Do not include the section title - only the content.

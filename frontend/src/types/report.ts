@@ -60,3 +60,56 @@ export interface ReportListResponse {
   page: number
   pages: number
 }
+
+// Generated content types
+export interface ReportSection {
+  title: string
+  content: string
+  subsections: ReportSection[]
+}
+
+export interface GeneratedReport {
+  title: string
+  executive_summary: string
+  sections: ReportSection[]
+  key_findings: string[]
+  recommendations: string[]
+  sources: string[]
+}
+
+export interface GeneratedPresentation {
+  title: string
+  slides: {
+    type: string
+    title: string
+    subtitle?: string
+    bullets?: string[]
+    findings?: string[]
+    items?: string[]
+  }[]
+}
+
+export interface GeneratedContent {
+  report: GeneratedReport
+  presentation?: GeneratedPresentation
+}
+
+// Section editing types
+export interface EditHistoryEntry {
+  sectionPath: string
+  sectionTitle: string
+  oldContent: string
+  newContent: string
+  appliedAt: string
+}
+
+export interface EditSectionRequest {
+  instructions: string
+}
+
+export interface EditSectionResponse {
+  section_path: string
+  old_content: string
+  new_content: string
+  applied_at: string
+}

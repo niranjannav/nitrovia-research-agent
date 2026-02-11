@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useReportStore } from '../stores/reportStore'
 import FileUploader from '../components/files/FileUploader'
 import FileList from '../components/files/FileList'
 import ReportConfigForm from '../components/reports/ReportConfigForm'
 import GenerationProgress from '../components/reports/GenerationProgress'
+import ReportEditor from '../components/reports/ReportEditor'
 
-type Step = 'upload' | 'configure' | 'generating'
+type Step = 'upload' | 'configure' | 'generating' | 'editing'
 
 export default function NewReportPage() {
   const navigate = useNavigate()
@@ -14,13 +15,27 @@ export default function NewReportPage() {
     selectedFiles,
     generateReport,
     currentReportId,
+    currentReport,
+    generationStatus,
     resetConfig,
+    clearEditorState,
     error,
     clearError,
     isLoading,
   } = useReportStore()
 
   const [step, setStep] = useState<Step>('upload')
+
+  // Transition to editing when generation completes
+  useEffect(() => {
+    if (
+      step === 'generating' &&
+      generationStatus?.status === 'completed' &&
+      currentReportId
+    ) {
+      setStep('editing')
+    }
+  }, [step, generationStatus?.status, currentReportId])
 
   const handleStartGeneration = async () => {
     try {
@@ -33,87 +48,75 @@ export default function NewReportPage() {
   }
 
   const handleComplete = () => {
-    // Optionally navigate to history or stay on page
+    if (currentReportId) {
+      setStep('editing')
+    }
   }
 
   const handleNewReport = () => {
     resetConfig()
+    clearEditorState()
     setStep('upload')
   }
 
+  const handleDownload = (format: 'pdf' | 'docx' | 'pptx') => {
+    const file = currentReport?.output_files?.find((f) => f.format === format)
+    if (file?.download_url) {
+      window.open(file.download_url, '_blank')
+    }
+  }
+
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className={step === 'editing' ? 'max-w-7xl mx-auto' : 'max-w-3xl mx-auto'}>
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Create New Report</h1>
-        <p className="text-gray-600 mt-1">
-          Upload documents and configure your report settings
-        </p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {step === 'editing' ? 'Edit Report' : 'Create New Report'}
+          </h1>
+          <p className="text-gray-600 mt-1">
+            {step === 'editing'
+              ? 'Click any section to select it, then enter your edit instructions'
+              : 'Upload documents and configure your report settings'}
+          </p>
+        </div>
+        {step === 'editing' && (
+          <button
+            onClick={handleNewReport}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            New Report
+          </button>
+        )}
       </div>
 
-      {/* Progress indicator */}
-      <div className="mb-8">
-        <div className="flex items-center">
-          <div
-            className={`flex items-center ${
-              step === 'upload' ? 'text-primary-600' : 'text-gray-400'
-            }`}
-          >
-            <span
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                step === 'upload'
-                  ? 'bg-primary-600 text-white'
-                  : step !== 'upload'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-200 text-gray-600'
-              }`}
-            >
-              1
-            </span>
-            <span className="ml-2 text-sm font-medium">Upload</span>
-          </div>
-
-          <div className="flex-1 mx-4 h-px bg-gray-200" />
-
-          <div
-            className={`flex items-center ${
-              step === 'configure' ? 'text-primary-600' : 'text-gray-400'
-            }`}
-          >
-            <span
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                step === 'configure'
-                  ? 'bg-primary-600 text-white'
-                  : step === 'generating'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-200 text-gray-600'
-              }`}
-            >
-              2
-            </span>
-            <span className="ml-2 text-sm font-medium">Configure</span>
-          </div>
-
-          <div className="flex-1 mx-4 h-px bg-gray-200" />
-
-          <div
-            className={`flex items-center ${
-              step === 'generating' ? 'text-primary-600' : 'text-gray-400'
-            }`}
-          >
-            <span
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                step === 'generating'
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-200 text-gray-600'
-              }`}
-            >
-              3
-            </span>
-            <span className="ml-2 text-sm font-medium">Generate</span>
+      {/* Progress indicator - only show for first 3 steps */}
+      {step !== 'editing' && (
+        <div className="mb-8">
+          <div className="flex items-center">
+            <StepIndicator
+              stepNumber={1}
+              label="Upload"
+              isActive={step === 'upload'}
+              isCompleted={step !== 'upload'}
+            />
+            <div className="flex-1 mx-4 h-px bg-gray-200" />
+            <StepIndicator
+              stepNumber={2}
+              label="Configure"
+              isActive={step === 'configure'}
+              isCompleted={step === 'generating' || step === 'editing'}
+            />
+            <div className="flex-1 mx-4 h-px bg-gray-200" />
+            <StepIndicator
+              stepNumber={3}
+              label="Generate"
+              isActive={step === 'generating'}
+              isCompleted={step === 'editing'}
+            />
           </div>
         </div>
-      </div>
+      )}
 
       {/* Error message */}
       {error && (
@@ -123,7 +126,7 @@ export default function NewReportPage() {
       )}
 
       {/* Step content */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+      <div className={`bg-white rounded-xl shadow-sm border border-gray-100 ${step === 'editing' ? '' : 'p-6'}`}>
         {step === 'upload' && (
           <div className="space-y-6">
             <FileUploader />
@@ -180,7 +183,58 @@ export default function NewReportPage() {
             </div>
           </div>
         )}
+
+        {step === 'editing' && currentReportId && (
+          <ReportEditor
+            reportId={currentReportId}
+            onDownload={handleDownload}
+            downloadUrls={currentReport?.output_files?.map((f) => ({
+              format: f.format,
+              download_url: f.download_url || '',
+            })) || []}
+          />
+        )}
       </div>
     </div>
+  )
+}
+
+interface StepIndicatorProps {
+  stepNumber: number
+  label: string
+  isActive: boolean
+  isCompleted: boolean
+}
+
+function StepIndicator({ stepNumber, label, isActive, isCompleted }: StepIndicatorProps) {
+  return (
+    <div
+      className={`flex items-center ${
+        isActive ? 'text-primary-600' : 'text-gray-400'
+      }`}
+    >
+      <span
+        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+          isActive || isCompleted
+            ? 'bg-primary-600 text-white'
+            : 'bg-gray-200 text-gray-600'
+        }`}
+      >
+        {isCompleted && !isActive ? (
+          <CheckIcon />
+        ) : (
+          stepNumber
+        )}
+      </span>
+      <span className="ml-2 text-sm font-medium">{label}</span>
+    </div>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+    </svg>
   )
 }
