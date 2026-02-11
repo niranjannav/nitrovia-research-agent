@@ -90,6 +90,10 @@ Thumbs.db
 *.temp
 .cache/
 
+# Preview files (UI mockups)
+frontend/public/preview.html
+frontend/public/preview-styles.css
+
 # Supabase
 .supabase/
 
