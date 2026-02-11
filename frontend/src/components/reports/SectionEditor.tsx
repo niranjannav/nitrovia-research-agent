@@ -147,7 +147,7 @@ export default function SectionEditor({
             </button>
           </div>
           <p className="text-xs text-gray-400 mt-1.5 px-1">
-            Press ⌘+Enter to apply
+            Press Ctrl+Enter to apply
           </p>
         </div>
       )}
