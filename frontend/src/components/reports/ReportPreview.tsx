@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { GeneratedReport, ReportSection } from '../../types/report'
 
 interface ReportPreviewProps {
@@ -53,9 +54,9 @@ export default function ReportPreview({
 
       {/* Sources */}
       {report.sources.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-sm font-medium text-gray-500 mb-2">Sources</h3>
-          <ul className="text-sm text-gray-600 space-y-1">
+        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-soft">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Sources</h3>
+          <ul className="text-sm text-gray-500 space-y-1">
             {report.sources.map((source, idx) => (
               <li key={idx}>{source}</li>
             ))}
@@ -81,26 +82,37 @@ function SectionCard({
   isSelected,
   onSelect,
 }: SectionCardProps) {
+  const [showToolbar, setShowToolbar] = useState(false)
+
   return (
     <div
       onClick={() => onSelect(isSelected ? null : path)}
+      onMouseEnter={() => setShowToolbar(true)}
+      onMouseLeave={() => setShowToolbar(false)}
       className={`
-        bg-white rounded-lg border-2 p-4 cursor-pointer transition-all
+        relative bg-white rounded-xl p-5 cursor-pointer transition-all
         ${isSelected
-          ? 'border-primary-500 ring-2 ring-primary-100'
-          : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+          ? 'ring-2 ring-primary-500 ring-offset-1 shadow-soft-md'
+          : 'border border-gray-100 hover:border-gray-200 hover:shadow-soft shadow-soft'
         }
       `}
     >
+      {/* Floating toolbar - Highlight-to-Action pattern */}
+      {showToolbar && !isSelected && (
+        <div className="floating-toolbar-enter absolute -top-3 right-3 flex items-center gap-1 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg px-2 py-1 shadow-soft-md z-10">
+          <span className="text-xs text-gray-400">Click to edit</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-2">
-        <h3 className="font-semibold text-gray-900">{title}</h3>
+        <h3 className="font-semibold text-gray-800 text-sm">{title}</h3>
         {isSelected && (
-          <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-0.5 rounded">
-            Selected
+          <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-0.5 rounded-md">
+            Editing
           </span>
         )}
       </div>
-      <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-6">
+      <p className="text-sm text-gray-600 whitespace-pre-wrap line-clamp-6 leading-relaxed">
         {content}
       </p>
     </div>
@@ -122,34 +134,44 @@ function ListSectionCard({
   isSelected,
   onSelect,
 }: ListSectionCardProps) {
+  const [showToolbar, setShowToolbar] = useState(false)
+
   return (
     <div
       onClick={() => onSelect(isSelected ? null : path)}
+      onMouseEnter={() => setShowToolbar(true)}
+      onMouseLeave={() => setShowToolbar(false)}
       className={`
-        bg-white rounded-lg border-2 p-4 cursor-pointer transition-all
+        relative bg-white rounded-xl p-5 cursor-pointer transition-all
         ${isSelected
-          ? 'border-primary-500 ring-2 ring-primary-100'
-          : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+          ? 'ring-2 ring-primary-500 ring-offset-1 shadow-soft-md'
+          : 'border border-gray-100 hover:border-gray-200 hover:shadow-soft shadow-soft'
         }
       `}
     >
+      {showToolbar && !isSelected && (
+        <div className="floating-toolbar-enter absolute -top-3 right-3 flex items-center gap-1 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg px-2 py-1 shadow-soft-md z-10">
+          <span className="text-xs text-gray-400">Click to edit</span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-2">
-        <h3 className="font-semibold text-gray-900">{title}</h3>
+        <h3 className="font-semibold text-gray-800 text-sm">{title}</h3>
         {isSelected && (
-          <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-0.5 rounded">
-            Selected
+          <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-0.5 rounded-md">
+            Editing
           </span>
         )}
       </div>
-      <ul className="text-sm text-gray-700 space-y-1">
+      <ul className="text-sm text-gray-600 space-y-1">
         {items.slice(0, 5).map((item, idx) => (
           <li key={idx} className="flex items-start gap-2">
-            <span className="text-primary-500 mt-1">•</span>
-            <span className="line-clamp-2">{item}</span>
+            <span className="text-primary-400 mt-0.5">•</span>
+            <span className="line-clamp-2 leading-relaxed">{item}</span>
           </li>
         ))}
         {items.length > 5 && (
-          <li className="text-gray-500 italic">
+          <li className="text-gray-400 italic pl-4">
             +{items.length - 5} more items
           </li>
         )}
@@ -172,28 +194,37 @@ function SectionWithSubsections({
   onSelectSection,
 }: SectionWithSubsectionsProps) {
   const isSelected = selectedPath === basePath
+  const [showToolbar, setShowToolbar] = useState(false)
 
   return (
     <div className="space-y-3">
       <div
         onClick={() => onSelectSection(isSelected ? null : basePath)}
+        onMouseEnter={() => setShowToolbar(true)}
+        onMouseLeave={() => setShowToolbar(false)}
         className={`
-          bg-white rounded-lg border-2 p-4 cursor-pointer transition-all
+          relative bg-white rounded-xl p-5 cursor-pointer transition-all
           ${isSelected
-            ? 'border-primary-500 ring-2 ring-primary-100'
-            : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+            ? 'ring-2 ring-primary-500 ring-offset-1 shadow-soft-md'
+            : 'border border-gray-100 hover:border-gray-200 hover:shadow-soft shadow-soft'
           }
         `}
       >
+        {showToolbar && !isSelected && (
+          <div className="floating-toolbar-enter absolute -top-3 right-3 flex items-center gap-1 bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg px-2 py-1 shadow-soft-md z-10">
+            <span className="text-xs text-gray-400">Click to edit</span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-2">
-          <h3 className="font-semibold text-gray-900">{section.title}</h3>
+          <h3 className="font-semibold text-gray-800 text-sm">{section.title}</h3>
           {isSelected && (
-            <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-0.5 rounded">
-              Selected
+            <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-0.5 rounded-md">
+              Editing
             </span>
           )}
         </div>
-        <p className="text-sm text-gray-700 whitespace-pre-wrap line-clamp-6">
+        <p className="text-sm text-gray-600 whitespace-pre-wrap line-clamp-6 leading-relaxed">
           {section.content}
         </p>
       </div>

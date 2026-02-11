@@ -18,9 +18,9 @@ export default function LoginPage() {
       <div className="max-w-md w-full">
         {/* Logo and title */}
         <div className="text-center mb-8">
-          <div className="mx-auto w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center">
+          <div className="mx-auto w-14 h-14 bg-primary-800 rounded-2xl flex items-center justify-center shadow-soft-md">
             <svg
-              className="w-7 h-7 text-white"
+              className="w-8 h-8 text-accent-400"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -33,10 +33,13 @@ export default function LoginPage() {
               />
             </svg>
           </div>
-          <h2 className="mt-4 text-2xl font-bold text-gray-900">
-            Research Report Generator
+          <h2 className="mt-5 text-2xl font-bold text-primary-800 tracking-tight">
+            Shambani Milk
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-1 text-sm text-gray-500">
+            AI-Powered Report Generator
+          </p>
+          <p className="mt-3 text-sm text-gray-500">
             {isLogin
               ? 'Sign in to your account'
               : 'Create your account to get started'}
@@ -44,7 +47,7 @@ export default function LoginPage() {
         </div>
 
         {/* Form card */}
-        <div className="bg-white py-8 px-6 shadow-lg rounded-xl">
+        <div className="bg-white py-8 px-6 shadow-soft-lg rounded-2xl border border-gray-100">
           {isLogin ? (
             <LoginForm onToggle={() => setIsLogin(false)} />
           ) : (

@@ -9,27 +9,27 @@ export default function EditHistory() {
 
   return (
     <div className="space-y-2">
-      <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+      <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
         <HistoryIcon />
-        Edit History
+        Recent Edits
       </h4>
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {editHistory.map((entry, idx) => (
           <div
             key={idx}
-            className="flex items-start justify-between gap-2 p-2 bg-gray-50 rounded-lg text-sm"
+            className="flex items-start justify-between gap-2 p-2.5 bg-gray-50 rounded-xl text-sm"
           >
             <div className="flex-1 min-w-0">
-              <div className="font-medium text-gray-900 truncate">
+              <div className="font-medium text-gray-700 text-xs truncate">
                 {entry.sectionTitle}
               </div>
-              <div className="text-xs text-gray-500">
+              <div className="text-xs text-gray-400 mt-0.5">
                 {formatTime(entry.appliedAt)}
               </div>
             </div>
             <button
               onClick={() => undoEdit(idx)}
-              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+              className="p-1 text-gray-300 hover:text-gray-500 transition-colors rounded"
               title="Remove from history"
             >
               <UndoIcon />
