@@ -55,12 +55,12 @@ export default function FileUploader() {
     <div className="space-y-4">
       <div
         {...getRootProps()}
-        className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+        className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
           isDragActive
             ? 'border-primary-500 bg-primary-50'
             : isDragReject
-            ? 'border-red-500 bg-red-50'
-            : 'border-gray-300 hover:border-primary-400 hover:bg-gray-50'
+            ? 'border-red-400 bg-red-50'
+            : 'border-gray-200 hover:border-primary-300 hover:bg-gray-50'
         }`}
       >
         <input {...getInputProps()} />

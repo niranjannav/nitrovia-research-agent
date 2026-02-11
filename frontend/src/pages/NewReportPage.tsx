@@ -66,67 +66,82 @@ export default function NewReportPage() {
     }
   }
 
-  return (
-    <div className={step === 'editing' ? 'max-w-7xl mx-auto' : 'max-w-3xl mx-auto'}>
-      {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {step === 'editing' ? 'Edit Report' : 'Create New Report'}
-          </h1>
-          <p className="text-gray-600 mt-1">
-            {step === 'editing'
-              ? 'Click any section to select it, then enter your edit instructions'
-              : 'Upload documents and configure your report settings'}
-          </p>
-        </div>
-        {step === 'editing' && (
+  if (step === 'editing' && currentReportId) {
+    return (
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Edit Report</h1>
+            <p className="text-gray-400 mt-1">
+              Click any section to select it, then enter your edit instructions
+            </p>
+          </div>
           <button
             onClick={handleNewReport}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
           >
             New Report
           </button>
-        )}
+        </div>
+        <div className="bg-white rounded-2xl shadow-soft border border-gray-100 overflow-hidden" style={{ height: 'calc(100vh - 200px)' }}>
+          <ReportEditor
+            reportId={currentReportId}
+            onDownload={handleDownload}
+            downloadUrls={currentReport?.output_files?.map((f) => ({
+              format: f.format,
+              download_url: f.download_url || '',
+            })) || []}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">Create New Report</h1>
+        <p className="text-gray-400 mt-1">
+          Upload documents and configure your report settings
+        </p>
       </div>
 
-      {/* Progress indicator - only show for first 3 steps */}
-      {step !== 'editing' && (
-        <div className="mb-8">
-          <div className="flex items-center">
-            <StepIndicator
-              stepNumber={1}
-              label="Upload"
-              isActive={step === 'upload'}
-              isCompleted={step !== 'upload'}
-            />
-            <div className="flex-1 mx-4 h-px bg-gray-200" />
-            <StepIndicator
-              stepNumber={2}
-              label="Configure"
-              isActive={step === 'configure'}
-              isCompleted={step === 'generating' || step === 'editing'}
-            />
-            <div className="flex-1 mx-4 h-px bg-gray-200" />
-            <StepIndicator
-              stepNumber={3}
-              label="Generate"
-              isActive={step === 'generating'}
-              isCompleted={step === 'editing'}
-            />
-          </div>
+      {/* Progress indicator */}
+      <div className="mb-8">
+        <div className="flex items-center">
+          <StepIndicator
+            stepNumber={1}
+            label="Upload"
+            isActive={step === 'upload'}
+            isCompleted={step !== 'upload'}
+          />
+          <div className={`flex-1 mx-4 h-px ${step !== 'upload' ? 'bg-primary-300' : 'bg-gray-200'}`} />
+          <StepIndicator
+            stepNumber={2}
+            label="Configure"
+            isActive={step === 'configure'}
+            isCompleted={step === 'generating'}
+          />
+          <div className={`flex-1 mx-4 h-px ${step === 'generating' ? 'bg-primary-300' : 'bg-gray-200'}`} />
+          <StepIndicator
+            stepNumber={3}
+            label="Generate"
+            isActive={step === 'generating'}
+            isCompleted={false}
+          />
         </div>
-      )}
+      </div>
 
       {/* Error message */}
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <div className="mb-6 bg-red-50 border border-red-100 text-red-600 px-4 py-3 rounded-xl text-sm">
           {error}
         </div>
       )}
 
       {/* Step content */}
-      <div className={`bg-white rounded-xl shadow-sm border border-gray-100 ${step === 'editing' ? '' : 'p-6'}`}>
+      <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-6">
         {step === 'upload' && (
           <div className="space-y-6">
             <FileUploader />
@@ -136,7 +151,7 @@ export default function NewReportPage() {
               <button
                 onClick={() => setStep('configure')}
                 disabled={selectedFiles.length === 0}
-                className="px-6 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-6 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-soft"
               >
                 Continue
               </button>
@@ -151,14 +166,14 @@ export default function NewReportPage() {
             <div className="flex justify-between pt-4 border-t border-gray-100">
               <button
                 onClick={() => setStep('upload')}
-                className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                className="px-6 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-medium hover:bg-gray-50 transition-colors"
               >
                 Back
               </button>
               <button
                 onClick={handleStartGeneration}
                 disabled={isLoading || selectedFiles.length === 0}
-                className="px-6 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-6 py-2.5 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-soft"
               >
                 {isLoading ? 'Starting...' : 'Generate Report'}
               </button>
@@ -176,23 +191,12 @@ export default function NewReportPage() {
             <div className="flex justify-center pt-4 border-t border-gray-100">
               <button
                 onClick={handleNewReport}
-                className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                className="px-6 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-medium hover:bg-gray-50 transition-colors"
               >
                 Create Another Report
               </button>
             </div>
           </div>
-        )}
-
-        {step === 'editing' && currentReportId && (
-          <ReportEditor
-            reportId={currentReportId}
-            onDownload={handleDownload}
-            downloadUrls={currentReport?.output_files?.map((f) => ({
-              format: f.format,
-              download_url: f.download_url || '',
-            })) || []}
-          />
         )}
       </div>
     </div>
@@ -210,14 +214,16 @@ function StepIndicator({ stepNumber, label, isActive, isCompleted }: StepIndicat
   return (
     <div
       className={`flex items-center ${
-        isActive ? 'text-primary-600' : 'text-gray-400'
+        isActive ? 'text-primary-600' : isCompleted ? 'text-primary-500' : 'text-gray-400'
       }`}
     >
       <span
-        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-          isActive || isCompleted
-            ? 'bg-primary-600 text-white'
-            : 'bg-gray-200 text-gray-600'
+        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+          isActive
+            ? 'bg-primary-600 text-white shadow-soft'
+            : isCompleted
+            ? 'bg-primary-500 text-white'
+            : 'bg-gray-100 text-gray-500'
         }`}
       >
         {isCompleted && !isActive ? (
