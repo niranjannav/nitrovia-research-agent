@@ -9,6 +9,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, TypedDict
 
+from app.models.document import ParsedDocument
 from app.models.schemas import GeneratedPresentation, GeneratedReport
 
 
@@ -17,6 +18,7 @@ class WorkflowStep(Enum):
 
     PENDING = "pending"
     PARSING = "parsing"
+    INDEXING = "indexing"
     BUILDING_CONTEXT = "building_context"
     GENERATING_REPORT = "generating_report"
     GENERATING_PRESENTATION = "generating_presentation"
@@ -88,7 +90,11 @@ class ReportWorkflowState(TypedDict, total=False):
     config: dict[str, Any]  # Report configuration from database
 
     # Parsed documents
-    documents: list[tuple[str, str]]  # (filename, content) tuples
+    documents: list[tuple[str, str]]  # (filename, content) tuples (backward compat)
+    parsed_documents: list[ParsedDocument]  # Structured parsed documents with metadata
+
+    # Research planning
+    research_questions: list[str]  # Expanded questions from title + prompt
 
     # Prepared context
     prepared_context: Optional[PreparedContext]
@@ -136,6 +142,8 @@ def create_initial_state(
         user_id=user_id,
         config=config,
         documents=[],
+        parsed_documents=[],
+        research_questions=[],
         prepared_context=None,
         generated_report=None,
         generated_presentation=None,

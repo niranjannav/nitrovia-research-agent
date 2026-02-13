@@ -188,8 +188,10 @@ def get_step_description(status: str, progress: int) -> str:
     elif status == "processing":
         if progress < 20:
             return "Parsing source documents..."
+        elif progress < 25:
+            return "Indexing documents for search..."
         elif progress < 30:
-            return "Building context..."
+            return "Retrieving relevant context..."
         elif progress < 60:
             return "Generating report content..."
         elif progress < 80:

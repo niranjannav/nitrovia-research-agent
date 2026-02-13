@@ -14,8 +14,10 @@ from app.workflows.nodes import (
     build_context_node,
     generate_presentation_node,
     generate_report_node,
+    index_documents_node,
     parse_documents_node,
     render_outputs_node,
+    retrieve_context_node,
 )
 from app.workflows.state import (
     ReportWorkflowState,
@@ -220,12 +222,14 @@ def create_report_workflow() -> StateGraph:
     """Create the report generation workflow graph.
 
     Builds a LangGraph StateGraph that orchestrates:
-    1. Document parsing
-    2. Context building (with summarization)
-    3. Report generation
-    4. Presentation generation (conditional)
-    5. Output rendering
-    6. Finalization
+    1. Document parsing (with metadata)
+    2. Document indexing (embedding + pgvector storage)
+    3. Context retrieval (research questions + similarity search)
+    4. Context building (with summarization fallback)
+    5. Report generation
+    6. Presentation generation (conditional)
+    7. Output rendering
+    8. Finalization
 
     Returns:
         Compiled StateGraph workflow
@@ -235,6 +239,8 @@ def create_report_workflow() -> StateGraph:
 
     # Add nodes
     workflow.add_node("parse_documents", parse_documents_node)
+    workflow.add_node("index_documents", index_documents_node)
+    workflow.add_node("retrieve_context", retrieve_context_node)
     workflow.add_node("build_context", build_context_node)
     workflow.add_node("generate_report", generate_report_node)
     workflow.add_node("generate_presentation", generate_presentation_node)
@@ -245,12 +251,33 @@ def create_report_workflow() -> StateGraph:
     # Set entry point
     workflow.set_entry_point("parse_documents")
 
-    # Add edges with conditional routing for error handling
+    # Parse → Index (with error handling)
     workflow.add_conditional_edges(
         "parse_documents",
         should_continue,
         {
-            "continue": "build_context",
+            "continue": "index_documents",
+            "handle_error": "handle_error",
+        },
+    )
+
+    # Index → Retrieve Context (with error handling)
+    workflow.add_conditional_edges(
+        "index_documents",
+        should_continue,
+        {
+            "continue": "retrieve_context",
+            "handle_error": "handle_error",
+        },
+    )
+
+    # Retrieve Context → Build Context fallback (with error handling)
+    workflow.add_conditional_edges(
+        "retrieve_context",
+        _route_after_retrieval,
+        {
+            "generate_report": "generate_report",
+            "build_context": "build_context",
             "handle_error": "handle_error",
         },
     )
@@ -298,6 +325,28 @@ def create_report_workflow() -> StateGraph:
     workflow.add_edge("handle_error", END)
 
     return workflow.compile()
+
+
+def _route_after_retrieval(state: ReportWorkflowState) -> str:
+    """Route after context retrieval.
+
+    If context was successfully retrieved, skip build_context and go
+    directly to report generation. Otherwise, fall back to build_context.
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        Next node name
+    """
+    if state.get("failed"):
+        return "handle_error"
+
+    prepared_context = state.get("prepared_context")
+    if prepared_context and prepared_context.combined_content:
+        return "generate_report"
+
+    return "build_context"
 
 
 # Singleton workflow instance
