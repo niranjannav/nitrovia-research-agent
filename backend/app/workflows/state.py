@@ -4,7 +4,7 @@ Defines the state that flows through the report generation workflow,
 including input, intermediate data, and output.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, TypedDict

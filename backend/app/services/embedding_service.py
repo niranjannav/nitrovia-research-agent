@@ -4,14 +4,13 @@ Handles generating embeddings via LiteLLM and storing/retrieving
 document chunks from Supabase Postgres with pgvector.
 """
 
-import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import litellm
 
 from app.config import get_settings
-from app.models.document import DocumentChunk, DocumentMetadata, ParsedDocument
+from app.models.document import ParsedDocument
 from app.services.supabase import get_supabase_client
 
 logger = logging.getLogger(__name__)

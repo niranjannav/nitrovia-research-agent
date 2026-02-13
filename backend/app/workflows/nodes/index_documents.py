@@ -8,13 +8,10 @@ import logging
 from datetime import datetime
 
 from app.models.document import ParsedDocument
-from app.services.document_parser import ParserFactory
 from app.services.embedding_service import EmbeddingService
-from app.services.supabase import get_supabase_client
 from app.workflows.state import (
     ReportWorkflowState,
     WorkflowStep,
-    mark_failed,
     mark_step_complete,
     update_progress,
 )

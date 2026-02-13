@@ -20,7 +20,6 @@ from app.workflows.state import (
     mark_failed,
     mark_step_complete,
     update_progress,
-    update_token_metrics,
 )
 
 logger = logging.getLogger(__name__)
@@ -192,7 +191,7 @@ async def retrieve_context_node(state: ReportWorkflowState) -> ReportWorkflowSta
             )
             state = mark_step_complete(state, WorkflowStep.BUILDING_CONTEXT, started_at)
             return state
-        except Exception as fallback_error:
+        except Exception:
             return mark_failed(state, f"Context retrieval failed: {e}")
 
 
