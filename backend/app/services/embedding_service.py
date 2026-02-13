@@ -226,25 +226,14 @@ class EmbeddingService:
             if source_file_ids:
                 query = query.in_("source_file_id", source_file_ids)
 
-            query = query.limit(top_k * 3)  # Fetch more for client-side ranking
+            query = query.limit(top_k * 3)  # Fetch more for fallback
             result = query.execute()
 
             if not result.data:
                 return []
 
-            # Client-side cosine similarity ranking (less efficient but functional)
-            import math
-
-            def cosine_similarity(a: list[float], b: list[float]) -> float:
-                dot = sum(x * y for x, y in zip(a, b))
-                norm_a = math.sqrt(sum(x * x for x in a))
-                norm_b = math.sqrt(sum(x * x for x in b))
-                if norm_a == 0 or norm_b == 0:
-                    return 0.0
-                return dot / (norm_a * norm_b)
-
-            # Note: This fallback doesn't use embeddings from DB for ranking
-            # It returns results without similarity scores
+            # Fallback returns results without similarity scores since
+            # embeddings are not available for client-side ranking
             return [
                 {
                     "content": row["content"],

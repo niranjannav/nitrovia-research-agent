@@ -25,7 +25,7 @@ class DocumentMetadata:
     chunk_index: int = 0  # Position of this chunk within the source file
     total_chunks: int = 1  # Total number of chunks from this source file
     page_number: Optional[int] = None  # Page/slide/sheet number if applicable
-    sheet_name: Optional[str] = None  # Sheet name for XLSX files
+    sheet_name: Optional[str] = None  # Sheet name for Excel (XLSX) files
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

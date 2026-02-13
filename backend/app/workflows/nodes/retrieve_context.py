@@ -110,7 +110,7 @@ async def retrieve_context_node(state: ReportWorkflowState) -> ReportWorkflowSta
                     source_file_ids.append(sfid)
 
         all_results: list[dict[str, Any]] = []
-        seen_contents: set[str] = set()
+        seen_contents: set[int] = set()
 
         for question in research_plan.questions:
             try:
@@ -123,8 +123,8 @@ async def retrieve_context_node(state: ReportWorkflowState) -> ReportWorkflowSta
 
                 for result in results:
                     content = result.get("content", "")
-                    # Deduplicate by content
-                    content_key = content[:200]
+                    # Deduplicate by content hash
+                    content_key = hash(content)
                     if content_key not in seen_contents:
                         seen_contents.add(content_key)
                         all_results.append(result)
@@ -239,7 +239,7 @@ def _build_context_from_results(
     for doc in doc_contexts:
         parts.append(f"=== DOCUMENT: {doc.file_name} ===\n\n{doc.content}")
 
-    combined_content = "\n\n" + "=" * 50 + "\n\n".join(parts)
+    combined_content = "\n\n" + ("\n\n" + "=" * 50 + "\n\n").join(parts)
 
     return PreparedContext(
         documents=doc_contexts,
@@ -287,7 +287,7 @@ def _build_context_from_raw_documents(
     for doc in doc_contexts:
         parts.append(f"=== DOCUMENT: {doc.file_name} ===\n\n{doc.content}")
 
-    combined_content = "\n\n" + "=" * 50 + "\n\n".join(parts)
+    combined_content = "\n\n" + ("\n\n" + "=" * 50 + "\n\n").join(parts)
 
     return PreparedContext(
         documents=doc_contexts,
