@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install system dependencies for WeasyPrint
+# Install system dependencies for WeasyPrint in a single layer
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
@@ -8,19 +8,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdk-pixbuf-2.0-0 \
     libffi-dev \
     shared-mime-info \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 WORKDIR /app
 
-# Install Python dependencies
+# Copy ONLY requirements first for better caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Install Python dependencies with pip cache
+# This layer will only rebuild if requirements.txt changes
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r requirements.txt
 
 # Create logs directory
 RUN mkdir -p /app/logs
+
+# Copy application code LAST
+# This way code changes don't invalidate dependency layers
+COPY . .
 
 # Set environment variable for logs
 ENV LOG_DIR=/app/logs

@@ -17,6 +17,8 @@ class TaskType(Enum):
     PRESENTATION_GEN = "presentation_generation"  # Slide generation (high quality)
     SECTION_EDIT = "section_edit"  # Editing individual sections (medium)
     CLASSIFICATION = "classification"  # Content classification (fast)
+    SKILL_PLANNING = "skill_planning"  # Skill selection agent (fast)
+    RESEARCH = "research"  # Research agent with tools (high quality)
 
 
 class Provider(Enum):
@@ -97,6 +99,8 @@ DEFAULT_ROUTING_TABLE: dict[TaskType, list[str]] = {
     TaskType.PRESENTATION_GEN: ["claude-sonnet-4", "gpt-4o"],
     TaskType.SECTION_EDIT: ["claude-sonnet-4", "gpt-4o-mini"],
     TaskType.CLASSIFICATION: ["claude-3-5-haiku", "gpt-4o-mini"],
+    TaskType.SKILL_PLANNING: ["claude-3-5-haiku", "gpt-4o-mini"],
+    TaskType.RESEARCH: ["claude-sonnet-4", "gpt-4o"],
 }
 
 

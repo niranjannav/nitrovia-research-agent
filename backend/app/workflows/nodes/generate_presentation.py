@@ -40,7 +40,8 @@ def _get_fallback_presentation_prompt() -> str:
     return """Create a presentation with {slide_count_min} to {slide_count_max} slides.
 
 Include a title slide, content slides with bullet points, key findings,
-recommendations, and a closing slide."""
+recommendations, and a closing slide. Use stat_callout, comparison,
+timeline, and chart slides when data warrants it."""
 
 
 def _convert_llm_presentation_to_schema(
@@ -57,6 +58,17 @@ def _convert_llm_presentation_to_schema(
                 bullets=slide.bullets,
                 findings=slide.findings,
                 items=slide.items,
+                stat_value=slide.stat_value,
+                stat_context=slide.stat_context,
+                left_items=slide.left_items,
+                right_items=slide.right_items,
+                left_label=slide.left_label,
+                right_label=slide.right_label,
+                events=slide.events,
+                chart_type=slide.chart_type,
+                chart_title=slide.chart_title,
+                data_labels=slide.data_labels,
+                data_values=slide.data_values,
                 contact=slide.contact,
                 notes=slide.notes,
             )
@@ -135,6 +147,7 @@ async def generate_presentation_node(state: ReportWorkflowState) -> ReportWorkfl
         system_prompt = prompt_template.format(
             slide_count_min=slide_count_min,
             slide_count_max=slide_count_max,
+            skill_context="",
         )
 
         # Format report content for LLM

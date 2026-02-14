@@ -1,6 +1,8 @@
 """LangGraph workflow for report generation.
 
 Defines the state graph that orchestrates the full report generation pipeline.
+Uses an agent-based research approach: files are registered (metadata only),
+then a research agent selectively reads and analyzes them using tools.
 """
 
 import logging
@@ -10,13 +12,12 @@ from typing import Any, Callable, Optional
 from langgraph.graph import END, StateGraph
 
 from app.services.supabase import get_supabase_client
-from app.workflows.nodes import (
-    build_context_node,
-    generate_presentation_node,
-    generate_report_node,
-    parse_documents_node,
-    render_outputs_node,
-)
+from app.workflows.nodes.register_files import register_files_node
+from app.workflows.nodes.plan_skills import plan_skills_node
+from app.workflows.nodes.research_agent import research_agent_node
+from app.workflows.nodes.generate_report import generate_report_node
+from app.workflows.nodes.generate_presentation import generate_presentation_node
+from app.workflows.nodes.render_outputs import render_outputs_node
 from app.workflows.state import (
     ReportWorkflowState,
     WorkflowStep,
@@ -219,13 +220,14 @@ def route_after_report(state: ReportWorkflowState) -> str:
 def create_report_workflow() -> StateGraph:
     """Create the report generation workflow graph.
 
-    Builds a LangGraph StateGraph that orchestrates:
-    1. Document parsing
-    2. Context building (with summarization)
-    3. Report generation
-    4. Presentation generation (conditional)
-    5. Output rendering
-    6. Finalization
+    New agent-based pipeline:
+    1. Register files (metadata only, no upfront parsing)
+    2. Plan skills (load only relevant skills based on file types)
+    3. Research agent (selectively reads files with tools, collects material)
+    4. Report generation (uses research notes)
+    5. Presentation generation (conditional, if PPTX requested)
+    6. Output rendering (PDF, DOCX, PPTX)
+    7. Finalization (save to database)
 
     Returns:
         Compiled StateGraph workflow
@@ -234,8 +236,9 @@ def create_report_workflow() -> StateGraph:
     workflow = StateGraph(ReportWorkflowState)
 
     # Add nodes
-    workflow.add_node("parse_documents", parse_documents_node)
-    workflow.add_node("build_context", build_context_node)
+    workflow.add_node("register_files", register_files_node)
+    workflow.add_node("plan_skills", plan_skills_node)
+    workflow.add_node("research_agent", research_agent_node)
     workflow.add_node("generate_report", generate_report_node)
     workflow.add_node("generate_presentation", generate_presentation_node)
     workflow.add_node("render_outputs", render_outputs_node)
@@ -243,20 +246,31 @@ def create_report_workflow() -> StateGraph:
     workflow.add_node("handle_error", handle_error_node)
 
     # Set entry point
-    workflow.set_entry_point("parse_documents")
+    workflow.set_entry_point("register_files")
 
-    # Add edges with conditional routing for error handling
+    # register_files → plan_skills (or error)
     workflow.add_conditional_edges(
-        "parse_documents",
+        "register_files",
         should_continue,
         {
-            "continue": "build_context",
+            "continue": "plan_skills",
             "handle_error": "handle_error",
         },
     )
 
+    # plan_skills → research_agent (or error)
     workflow.add_conditional_edges(
-        "build_context",
+        "plan_skills",
+        should_continue,
+        {
+            "continue": "research_agent",
+            "handle_error": "handle_error",
+        },
+    )
+
+    # research_agent → generate_report (or error)
+    workflow.add_conditional_edges(
+        "research_agent",
         should_continue,
         {
             "continue": "generate_report",

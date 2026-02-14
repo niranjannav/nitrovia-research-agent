@@ -240,12 +240,31 @@ class GeneratedReport(BaseModel):
 class PresentationSlide(BaseModel):
     """A slide in the generated presentation."""
 
-    type: Literal["title", "section", "content", "key_findings", "recommendations", "closing"]
+    type: Literal[
+        "title", "section", "content", "key_findings",
+        "stat_callout", "comparison", "timeline", "chart",
+        "recommendations", "closing",
+    ]
     title: str
     subtitle: str | None = None
     bullets: list[str] | None = None
     findings: list[str] | None = None
     items: list[str] | None = None
+    # stat_callout
+    stat_value: str | None = None
+    stat_context: str | None = None
+    # comparison
+    left_items: list[str] | None = None
+    right_items: list[str] | None = None
+    left_label: str | None = None
+    right_label: str | None = None
+    # timeline
+    events: list[dict[str, str]] | None = None
+    # chart
+    chart_type: str | None = None
+    chart_title: str | None = None
+    data_labels: list[str] | None = None
+    data_values: list[float] | None = None
     contact: str | None = None
     notes: str | None = None
 

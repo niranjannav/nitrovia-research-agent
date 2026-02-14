@@ -152,7 +152,9 @@ class LLMPresentationSlide(BaseModel):
     """A slide in an LLM-generated presentation."""
 
     type: Literal[
-        "title", "section", "content", "key_findings", "recommendations", "closing"
+        "title", "section", "content", "key_findings",
+        "stat_callout", "comparison", "timeline", "chart",
+        "recommendations", "closing",
     ] = Field(
         ...,
         description="Slide type determining the layout",
@@ -176,6 +178,54 @@ class LLMPresentationSlide(BaseModel):
     items: list[str] | None = Field(
         default=None,
         description="Recommendation items (for recommendations slide type)",
+    )
+    # stat_callout fields
+    stat_value: str | None = Field(
+        default=None,
+        description="The headline statistic/metric (e.g., '$4.2M', '97%', '3x growth')",
+    )
+    stat_context: str | None = Field(
+        default=None,
+        description="Context line explaining the stat's significance",
+    )
+    # comparison fields
+    left_items: list[str] | None = Field(
+        default=None,
+        description="Left column items for comparison slides",
+    )
+    right_items: list[str] | None = Field(
+        default=None,
+        description="Right column items for comparison slides",
+    )
+    left_label: str | None = Field(
+        default=None,
+        description="Label for the left comparison column",
+    )
+    right_label: str | None = Field(
+        default=None,
+        description="Label for the right comparison column",
+    )
+    # timeline fields
+    events: list[dict[str, str]] | None = Field(
+        default=None,
+        description="Timeline events as [{date: '...', description: '...'}]",
+    )
+    # chart fields
+    chart_type: str | None = Field(
+        default=None,
+        description="Chart type: 'bar', 'horizontal_bar', 'line', 'pie'",
+    )
+    chart_title: str | None = Field(
+        default=None,
+        description="Chart title/caption",
+    )
+    data_labels: list[str] | None = Field(
+        default=None,
+        description="Labels for chart data points",
+    )
+    data_values: list[float] | None = Field(
+        default=None,
+        description="Numeric values for chart data points",
     )
     contact: str | None = Field(
         default=None,

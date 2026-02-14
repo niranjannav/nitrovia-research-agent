@@ -26,6 +26,7 @@ from .report_workflow import (
 )
 from .state import (
     DocumentContext,
+    FileRegistryEntry,
     OutputFile,
     PreparedContext,
     ReportWorkflowState,
@@ -44,6 +45,7 @@ __all__ = [
     "ReportWorkflowState",
     "WorkflowStep",
     "DocumentContext",
+    "FileRegistryEntry",
     "PreparedContext",
     "OutputFile",
     "TokenMetrics",

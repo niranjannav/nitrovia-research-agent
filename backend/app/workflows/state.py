@@ -16,14 +16,19 @@ class WorkflowStep(Enum):
     """Steps in the report generation workflow."""
 
     PENDING = "pending"
-    PARSING = "parsing"
-    BUILDING_CONTEXT = "building_context"
+    REGISTERING_FILES = "registering_files"
+    RESEARCHING = "researching"
     GENERATING_REPORT = "generating_report"
     GENERATING_PRESENTATION = "generating_presentation"
     RENDERING = "rendering"
     FINALIZING = "finalizing"
     COMPLETED = "completed"
     FAILED = "failed"
+
+    # Legacy steps (kept for backward compat)
+    PARSING = "parsing"
+    BUILDING_CONTEXT = "building_context"
+    PLANNING_SKILLS = "planning_skills"
 
 
 @dataclass
@@ -46,6 +51,18 @@ class PreparedContext:
 
 
 @dataclass
+class FileRegistryEntry:
+    """Metadata about an uploaded file (no parsed content)."""
+
+    file_id: str
+    file_name: str
+    file_type: str  # extension, e.g. ".pdf"
+    file_size: int  # bytes
+    storage_path: str  # Supabase storage path
+    mime_type: str = ""
+
+
+@dataclass
 class OutputFile:
     """Generated output file metadata."""
 
@@ -53,6 +70,43 @@ class OutputFile:
     storage_path: str
     download_url: Optional[str] = None
     expires_at: Optional[str] = None
+
+
+@dataclass
+class TokenBudget:
+    """Token budget tracker to enforce per-call and cumulative limits.
+
+    Constraints:
+    - max_per_call: No single LLM call should exceed this (40% of 200K = 80K)
+    - max_cumulative: Total tokens across ALL calls in the workflow
+    """
+
+    max_per_call: int = 80_000
+    max_cumulative: int = 400_000
+    cumulative_input: int = 0
+    cumulative_output: int = 0
+
+    @property
+    def cumulative_used(self) -> int:
+        return self.cumulative_input + self.cumulative_output
+
+    @property
+    def remaining(self) -> int:
+        return self.max_cumulative - self.cumulative_used
+
+    def can_afford(self, estimated_tokens: int) -> bool:
+        return self.cumulative_used + estimated_tokens <= self.max_cumulative
+
+    def record_usage(self, input_tokens: int, output_tokens: int) -> None:
+        self.cumulative_input += input_tokens
+        self.cumulative_output += output_tokens
+
+    def get_file_token_limit(self, total_files: int) -> int:
+        """Adaptive per-file token limit based on file count and remaining budget."""
+        # Reserve 20K for system prompts, agent reasoning, synthesis, downstream
+        available = max(self.remaining - 20_000, 10_000)
+        per_file = available // max(total_files, 1)
+        return max(1_500, min(per_file, 6_000))
 
 
 @dataclass
@@ -87,10 +141,17 @@ class ReportWorkflowState(TypedDict, total=False):
     user_id: str
     config: dict[str, Any]  # Report configuration from database
 
-    # Parsed documents
-    documents: list[tuple[str, str]]  # (filename, content) tuples
+    # File registry (metadata only — no parsed content upfront)
+    file_registry: list[FileRegistryEntry]
 
-    # Prepared context
+    # Research agent output
+    research_notes: str  # Collected research material from agent
+
+    # Legacy fields (kept for backward compat)
+    documents: list[tuple[str, str]]  # (filename, content) tuples
+    input_file_types: set[str]  # e.g., {".xlsx", ".pdf"}
+    loaded_skills: list[dict[str, str]]  # [{name, content}]
+    skill_plan_notes: Optional[str]
     prepared_context: Optional[PreparedContext]
 
     # Generated content
@@ -109,7 +170,8 @@ class ReportWorkflowState(TypedDict, total=False):
     errors: list[str]
     failed: bool
 
-    # Metrics
+    # Budget & Metrics
+    token_budget: TokenBudget
     token_metrics: TokenMetrics
     step_timings: list[StepTiming]
     started_at: Optional[datetime]
@@ -135,7 +197,12 @@ def create_initial_state(
         report_id=report_id,
         user_id=user_id,
         config=config,
+        file_registry=[],
+        research_notes="",
         documents=[],
+        input_file_types=set(),
+        loaded_skills=[],
+        skill_plan_notes=None,
         prepared_context=None,
         generated_report=None,
         generated_presentation=None,
@@ -145,6 +212,7 @@ def create_initial_state(
         status_message="Initializing...",
         errors=[],
         failed=False,
+        token_budget=TokenBudget(),
         token_metrics=TokenMetrics(),
         step_timings=[],
         started_at=datetime.utcnow(),
@@ -260,7 +328,7 @@ def update_token_metrics(
     output_tokens: int,
     cost: float = 0.0,
 ) -> ReportWorkflowState:
-    """Update token usage metrics.
+    """Update token usage metrics and budget tracker.
 
     Args:
         state: Current state
@@ -279,7 +347,12 @@ def update_token_metrics(
         estimated_cost=current.estimated_cost + cost,
     )
 
+    # Also update the budget tracker
+    budget = state.get("token_budget", TokenBudget())
+    budget.record_usage(input_tokens, output_tokens)
+
     return {
         **state,
         "token_metrics": updated_metrics,
+        "token_budget": budget,
     }

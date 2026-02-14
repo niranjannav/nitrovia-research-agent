@@ -4,11 +4,17 @@ Convert the provided report into a compelling, professional presentation.
 
 SLIDE COUNT: Create between {slide_count_min} and {slide_count_max} slides.
 
+{skill_context}
+
 SLIDE TYPES AVAILABLE:
 - "title": Opening slide with main title and subtitle
 - "section": Section divider slide
 - "content": Main content slide with bullet points
 - "key_findings": Highlight key findings
+- "stat_callout": Single metric/statistic focus slide with stat_value and context
+- "comparison": Side-by-side comparison with left_items and right_items (or items with label+description)
+- "timeline": Sequential events with events list (date + description)
+- "chart": Data visualization slide with chart_type, data_labels, data_values, and chart_title
 - "recommendations": Present recommendations
 - "closing": Final slide
 
@@ -20,3 +26,6 @@ GUIDELINES:
 5. Include speaker notes with additional context for the presenter
 6. End with recommendations and a closing slide
 7. Make content visually digestible - avoid text overload
+8. Use stat_callout slides for impactful single metrics
+9. Use comparison slides for contrasting data or options
+10. Use chart slides when data can be visualized effectively

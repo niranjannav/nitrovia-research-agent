@@ -5,6 +5,7 @@ Downloads and parses source documents for the report.
 
 import logging
 from datetime import datetime
+from pathlib import Path
 
 from app.config import get_settings
 from app.services.document_parser import ParserFactory
@@ -66,9 +67,19 @@ def parse_documents_node(state: ReportWorkflowState) -> ReportWorkflowState:
         ).execute()
 
         documents: list[tuple[str, str]] = []
+        input_file_types: set[str] = set()
 
         for sf in source_files.data:
             file_name = sf.get("file_name", "unknown")
+            file_type = sf.get("file_type", "")
+
+            # Track file extension
+            ext = file_type if file_type.startswith(".") else f".{file_type}" if file_type else ""
+            if not ext:
+                ext = Path(file_name).suffix
+            if ext:
+                input_file_types.add(ext.lower())
+
             try:
                 # Check if already parsed (reuse cached content)
                 if sf.get("parsing_status") == "completed" and sf.get("parsed_content"):
@@ -122,6 +133,7 @@ def parse_documents_node(state: ReportWorkflowState) -> ReportWorkflowState:
         state = {
             **state,
             "documents": documents,
+            "input_file_types": input_file_types,
         }
 
         state = update_progress(state, WorkflowStep.PARSING, 20, "Documents parsed")

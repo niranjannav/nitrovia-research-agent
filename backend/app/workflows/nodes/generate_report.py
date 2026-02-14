@@ -60,6 +60,7 @@ def _get_fallback_report_prompt() -> str:
     """Fallback prompt if file not found."""
     return """You are an expert research analyst. Create a professional report.
 
+REPORT TITLE: {title}
 DETAIL LEVEL: {detail_level}
 {detail_guidance}
 
@@ -97,17 +98,19 @@ def _convert_llm_report_to_schema(llm_report: LLMGeneratedReport) -> GeneratedRe
 async def generate_report_node(state: ReportWorkflowState) -> ReportWorkflowState:
     """Generate report content using the LLM gateway.
 
-    Uses structured output to generate a validated report matching
-    the expected schema.
+    Uses structured output to generate a validated report. Consumes
+    research_notes from the research agent (preferred) or falls back
+    to prepared_context for backward compatibility.
 
     Args:
-        state: Current workflow state with prepared context
+        state: Current workflow state with research_notes or prepared_context
 
     Returns:
         Updated state with generated report
     """
     report_id = state["report_id"]
     config = state.get("config", {})
+    research_notes = state.get("research_notes", "")
     prepared_context = state.get("prepared_context")
     started_at = datetime.utcnow()
 
@@ -116,12 +119,19 @@ async def generate_report_node(state: ReportWorkflowState) -> ReportWorkflowStat
     state = update_progress(
         state,
         WorkflowStep.GENERATING_REPORT,
-        35,
+        55,
         "Generating report content...",
     )
 
-    if not prepared_context:
-        return mark_failed(state, "No prepared context available")
+    # Determine content source
+    if research_notes:
+        source_content = research_notes
+        logger.info(f"[WORKFLOW] Report {report_id} | REPORT | Using research notes ({len(research_notes)} chars)")
+    elif prepared_context:
+        source_content = prepared_context.combined_content
+        logger.info(f"[WORKFLOW] Report {report_id} | REPORT | Using prepared context (legacy)")
+    else:
+        return mark_failed(state, "No research notes or context available")
 
     try:
         # Create gateway
@@ -143,7 +153,9 @@ async def generate_report_node(state: ReportWorkflowState) -> ReportWorkflowStat
         detail_guidance = _get_detail_guidance(detail_level)
 
         # Build system prompt
+        title = config.get("title", "Research Report")
         system_prompt = prompt_template.format(
+            title=title,
             detail_level=detail_level.upper(),
             detail_guidance=detail_guidance,
         )
@@ -154,11 +166,7 @@ async def generate_report_node(state: ReportWorkflowState) -> ReportWorkflowStat
         if custom_instructions:
             user_content += f"USER INSTRUCTIONS:\n{custom_instructions}\n\n"
 
-        title_hint = config.get("title")
-        if title_hint:
-            user_content += f"SUGGESTED TITLE: {title_hint}\n\n"
-
-        user_content += f"SOURCE DOCUMENTS:\n{prepared_context.combined_content}\n\nGenerate the report now."
+        user_content += f"RESEARCH MATERIAL:\n{source_content}\n\nGenerate the report now."
 
         logger.info(f"[WORKFLOW] Report {report_id} | REPORT | Calling LLM with detail_level={detail_level}")
 
