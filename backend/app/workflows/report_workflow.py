@@ -12,12 +12,15 @@ from typing import Any, Callable, Optional
 from langgraph.graph import END, StateGraph
 
 from app.services.supabase import get_supabase_client
-from app.workflows.nodes.register_files import register_files_node
-from app.workflows.nodes.plan_skills import plan_skills_node
-from app.workflows.nodes.research_agent import research_agent_node
-from app.workflows.nodes.generate_report import generate_report_node
-from app.workflows.nodes.generate_presentation import generate_presentation_node
-from app.workflows.nodes.render_outputs import render_outputs_node
+from app.workflows.nodes import (
+    build_context_node,
+    generate_presentation_node,
+    generate_report_node,
+    index_documents_node,
+    parse_documents_node,
+    render_outputs_node,
+    retrieve_context_node,
+)
 from app.workflows.state import (
     ReportWorkflowState,
     WorkflowStep,
@@ -220,14 +223,15 @@ def route_after_report(state: ReportWorkflowState) -> str:
 def create_report_workflow() -> StateGraph:
     """Create the report generation workflow graph.
 
-    New agent-based pipeline:
-    1. Register files (metadata only, no upfront parsing)
-    2. Plan skills (load only relevant skills based on file types)
-    3. Research agent (selectively reads files with tools, collects material)
-    4. Report generation (uses research notes)
-    5. Presentation generation (conditional, if PPTX requested)
-    6. Output rendering (PDF, DOCX, PPTX)
-    7. Finalization (save to database)
+    Builds a LangGraph StateGraph that orchestrates:
+    1. Document parsing (with metadata)
+    2. Document indexing (embedding + pgvector storage)
+    3. Context retrieval (research questions + similarity search)
+    4. Context building (with summarization fallback)
+    5. Report generation
+    6. Presentation generation (conditional)
+    7. Output rendering
+    8. Finalization
 
     Returns:
         Compiled StateGraph workflow
@@ -236,9 +240,10 @@ def create_report_workflow() -> StateGraph:
     workflow = StateGraph(ReportWorkflowState)
 
     # Add nodes
-    workflow.add_node("register_files", register_files_node)
-    workflow.add_node("plan_skills", plan_skills_node)
-    workflow.add_node("research_agent", research_agent_node)
+    workflow.add_node("parse_documents", parse_documents_node)
+    workflow.add_node("index_documents", index_documents_node)
+    workflow.add_node("retrieve_context", retrieve_context_node)
+    workflow.add_node("build_context", build_context_node)
     workflow.add_node("generate_report", generate_report_node)
     workflow.add_node("generate_presentation", generate_presentation_node)
     workflow.add_node("render_outputs", render_outputs_node)
@@ -248,22 +253,33 @@ def create_report_workflow() -> StateGraph:
     # Set entry point
     workflow.set_entry_point("register_files")
 
-    # register_files → plan_skills (or error)
-    workflow.add_conditional_edges(
-        "register_files",
-        should_continue,
-        {
-            "continue": "plan_skills",
-            "handle_error": "handle_error",
-        },
-    )
-
-    # plan_skills → research_agent (or error)
+    # Parse → Index (with error handling)
     workflow.add_conditional_edges(
         "plan_skills",
         should_continue,
         {
-            "continue": "research_agent",
+            "continue": "index_documents",
+            "handle_error": "handle_error",
+        },
+    )
+
+    # Index → Retrieve Context (with error handling)
+    workflow.add_conditional_edges(
+        "index_documents",
+        should_continue,
+        {
+            "continue": "retrieve_context",
+            "handle_error": "handle_error",
+        },
+    )
+
+    # Retrieve Context → Build Context fallback (with error handling)
+    workflow.add_conditional_edges(
+        "retrieve_context",
+        _route_after_retrieval,
+        {
+            "generate_report": "generate_report",
+            "build_context": "build_context",
             "handle_error": "handle_error",
         },
     )
@@ -312,6 +328,28 @@ def create_report_workflow() -> StateGraph:
     workflow.add_edge("handle_error", END)
 
     return workflow.compile()
+
+
+def _route_after_retrieval(state: ReportWorkflowState) -> str:
+    """Route after context retrieval.
+
+    If context was successfully retrieved, skip build_context and go
+    directly to report generation. Otherwise, fall back to build_context.
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        Next node name
+    """
+    if state.get("failed"):
+        return "handle_error"
+
+    prepared_context = state.get("prepared_context")
+    if prepared_context and prepared_context.combined_content:
+        return "generate_report"
+
+    return "build_context"
 
 
 # Singleton workflow instance

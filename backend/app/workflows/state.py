@@ -4,11 +4,12 @@ Defines the state that flows through the report generation workflow,
 including input, intermediate data, and output.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional, TypedDict
 
+from app.models.document import ParsedDocument
 from app.models.schemas import GeneratedPresentation, GeneratedReport
 
 
@@ -16,8 +17,9 @@ class WorkflowStep(Enum):
     """Steps in the report generation workflow."""
 
     PENDING = "pending"
-    REGISTERING_FILES = "registering_files"
-    RESEARCHING = "researching"
+    PARSING = "parsing"
+    INDEXING = "indexing"
+    BUILDING_CONTEXT = "building_context"
     GENERATING_REPORT = "generating_report"
     GENERATING_PRESENTATION = "generating_presentation"
     RENDERING = "rendering"
@@ -141,17 +143,14 @@ class ReportWorkflowState(TypedDict, total=False):
     user_id: str
     config: dict[str, Any]  # Report configuration from database
 
-    # File registry (metadata only — no parsed content upfront)
-    file_registry: list[FileRegistryEntry]
+    # Parsed documents
+    documents: list[tuple[str, str]]  # (filename, content) tuples (backward compat)
+    parsed_documents: list[ParsedDocument]  # Structured parsed documents with metadata
 
-    # Research agent output
-    research_notes: str  # Collected research material from agent
+    # Research planning
+    research_questions: list[str]  # Expanded questions from title + prompt
 
-    # Legacy fields (kept for backward compat)
-    documents: list[tuple[str, str]]  # (filename, content) tuples
-    input_file_types: set[str]  # e.g., {".xlsx", ".pdf"}
-    loaded_skills: list[dict[str, str]]  # [{name, content}]
-    skill_plan_notes: Optional[str]
+    # Prepared context
     prepared_context: Optional[PreparedContext]
 
     # Generated content
@@ -200,9 +199,8 @@ def create_initial_state(
         file_registry=[],
         research_notes="",
         documents=[],
-        input_file_types=set(),
-        loaded_skills=[],
-        skill_plan_notes=None,
+        parsed_documents=[],
+        research_questions=[],
         prepared_context=None,
         generated_report=None,
         generated_presentation=None,

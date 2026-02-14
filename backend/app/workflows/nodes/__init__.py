@@ -13,19 +13,16 @@ for backward compatibility but no longer used in the main workflow.
 
 from .generate_presentation import generate_presentation_node
 from .generate_report import generate_report_node
-from .register_files import register_files_node
-from .render_outputs import render_outputs_node
-from .research_agent import research_agent_node
-
-# Legacy imports (kept for backward compat)
-from .build_context import build_context_node
+from .index_documents import index_documents_node
 from .parse_documents import parse_documents_node
-from .plan_skills import plan_skills_node
+from .render_outputs import render_outputs_node
+from .retrieve_context import retrieve_context_node
 
 __all__ = [
-    # New pipeline
-    "register_files_node",
-    "research_agent_node",
+    "parse_documents_node",
+    "index_documents_node",
+    "retrieve_context_node",
+    "build_context_node",
     "generate_report_node",
     "generate_presentation_node",
     "render_outputs_node",
