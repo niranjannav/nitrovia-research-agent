@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     # Embedding model for pgvector
     embedding_model: str = "text-embedding-3-small"
+    embedding_provider: str = "openai"
 
     # CORS
     cors_origins: str = "http://localhost:5173"

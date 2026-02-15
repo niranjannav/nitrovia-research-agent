@@ -124,14 +124,27 @@ async def generate_report_node(state: ReportWorkflowState) -> ReportWorkflowStat
     )
 
     # Determine content source
+    # Cap at ~25K tokens (~100K chars) to stay within per-minute rate limits
+    MAX_SOURCE_CHARS = 100_000
+
     if research_notes:
         source_content = research_notes
         logger.info(f"[WORKFLOW] Report {report_id} | REPORT | Using research notes ({len(research_notes)} chars)")
     elif prepared_context:
         source_content = prepared_context.combined_content
-        logger.info(f"[WORKFLOW] Report {report_id} | REPORT | Using prepared context (legacy)")
+        logger.info(f"[WORKFLOW] Report {report_id} | REPORT | Using prepared context ({len(source_content)} chars)")
     else:
         return mark_failed(state, "No research notes or context available")
+
+    # Truncate to stay within rate limits
+    if len(source_content) > MAX_SOURCE_CHARS:
+        original_len = len(source_content)
+        source_content = source_content[:MAX_SOURCE_CHARS] + \
+            f"\n\n[... content truncated from {original_len} to {MAX_SOURCE_CHARS} chars to fit context budget ...]"
+        logger.warning(
+            f"[WORKFLOW] Report {report_id} | REPORT | "
+            f"Truncated context from {original_len} to {MAX_SOURCE_CHARS} chars"
+        )
 
     try:
         # Create gateway

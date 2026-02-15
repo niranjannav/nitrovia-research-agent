@@ -251,11 +251,11 @@ def create_report_workflow() -> StateGraph:
     workflow.add_node("handle_error", handle_error_node)
 
     # Set entry point
-    workflow.set_entry_point("register_files")
+    workflow.set_entry_point("parse_documents")
 
     # Parse → Index (with error handling)
     workflow.add_conditional_edges(
-        "plan_skills",
+        "parse_documents",
         should_continue,
         {
             "continue": "index_documents",
@@ -284,9 +284,9 @@ def create_report_workflow() -> StateGraph:
         },
     )
 
-    # research_agent → generate_report (or error)
+    # build_context → generate_report (or error)
     workflow.add_conditional_edges(
-        "research_agent",
+        "build_context",
         should_continue,
         {
             "continue": "generate_report",

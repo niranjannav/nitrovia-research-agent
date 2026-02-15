@@ -15,10 +15,21 @@ setup_logging(level=settings.log_level)
 logger = logging.getLogger(__name__)
 
 
+def _configure_api_keys() -> None:
+    """Set LLM API keys in environment so litellm can find them."""
+    import os
+
+    if settings.anthropic_api_key:
+        os.environ.setdefault("ANTHROPIC_API_KEY", settings.anthropic_api_key)
+    if settings.openai_api_key:
+        os.environ.setdefault("OPENAI_API_KEY", settings.openai_api_key)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup/shutdown events."""
     # Startup
+    _configure_api_keys()
     logger.info(f"Starting application in {settings.environment} mode")
     yield
     # Shutdown

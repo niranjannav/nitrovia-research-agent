@@ -4,13 +4,12 @@ Each node represents a step in the report generation pipeline.
 Nodes receive the workflow state, perform their task, and return
 updated state.
 
-New pipeline:
-  register_files → research_agent → generate_report → [generate_presentation] → render_outputs
-
-Legacy nodes (parse_documents, build_context, plan_skills) are kept
-for backward compatibility but no longer used in the main workflow.
+Pipeline:
+  parse_documents → index_documents → retrieve_context → [build_context] →
+  generate_report → [generate_presentation] → render_outputs → finalize
 """
 
+from .build_context import build_context_node
 from .generate_presentation import generate_presentation_node
 from .generate_report import generate_report_node
 from .index_documents import index_documents_node
@@ -26,8 +25,4 @@ __all__ = [
     "generate_report_node",
     "generate_presentation_node",
     "render_outputs_node",
-    # Legacy
-    "parse_documents_node",
-    "build_context_node",
-    "plan_skills_node",
 ]

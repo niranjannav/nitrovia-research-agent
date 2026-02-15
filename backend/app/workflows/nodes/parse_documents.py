@@ -72,6 +72,7 @@ def parse_documents_node(state: ReportWorkflowState) -> ReportWorkflowState:
 
         documents: list[tuple[str, str]] = []
         parsed_documents: list[ParsedDocument] = []
+        input_file_types: set[str] = set()
 
         for sf in source_files.data:
             file_name = sf.get("file_name", "unknown")

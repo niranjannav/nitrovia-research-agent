@@ -4,6 +4,7 @@ Handles generating embeddings via LiteLLM and storing/retrieving
 document chunks from Supabase Postgres with pgvector.
 """
 
+import asyncio
 import logging
 from typing import Any
 
@@ -22,6 +23,12 @@ EMBEDDING_DIMENSIONS = 1536
 EMBEDDING_BATCH_SIZE = 50
 # Top-N results per query during similarity search
 DEFAULT_TOP_K = 5
+# Delay between embedding batches to avoid rate limits (seconds)
+BATCH_DELAY_SECONDS = 1.0
+# Max retries for rate-limited embedding calls
+MAX_EMBEDDING_RETRIES = 3
+# Wait time on rate limit before retrying (seconds)
+RATE_LIMIT_WAIT_SECONDS = 61.0
 
 
 class EmbeddingService:
@@ -59,10 +66,14 @@ class EmbeddingService:
         self.embedding_model = embedding_model or getattr(
             self.settings, "embedding_model", DEFAULT_EMBEDDING_MODEL
         )
+        self.api_key = getattr(self.settings, "openai_api_key", None)
         self.supabase = get_supabase_client()
 
     async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a list of texts.
+
+        Processes in batches with delays between batches to respect rate
+        limits. Retries on 429 errors with a 61-second wait.
 
         Args:
             texts: List of text strings to embed
@@ -74,20 +85,51 @@ class EmbeddingService:
             return []
 
         all_embeddings: list[list[float]] = []
+        total_batches = (len(texts) + EMBEDDING_BATCH_SIZE - 1) // EMBEDDING_BATCH_SIZE
 
         # Process in batches
-        for i in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+        for batch_idx, i in enumerate(range(0, len(texts), EMBEDDING_BATCH_SIZE)):
             batch = texts[i : i + EMBEDDING_BATCH_SIZE]
-            try:
-                response = await litellm.aembedding(
-                    model=self.embedding_model,
-                    input=batch,
-                )
-                batch_embeddings = [item["embedding"] for item in response.data]
-                all_embeddings.extend(batch_embeddings)
-            except Exception as e:
-                logger.error(f"Embedding generation failed for batch {i}: {e}")
-                raise
+
+            # Add delay between batches (not before first)
+            if batch_idx > 0:
+                await asyncio.sleep(BATCH_DELAY_SECONDS)
+
+            # Retry loop for rate limits
+            for attempt in range(1, MAX_EMBEDDING_RETRIES + 1):
+                try:
+                    kwargs: dict[str, Any] = {
+                        "model": self.embedding_model,
+                        "input": batch,
+                    }
+                    if self.api_key:
+                        kwargs["api_key"] = self.api_key
+                    response = await litellm.aembedding(**kwargs)
+                    batch_embeddings = [item["embedding"] for item in response.data]
+                    all_embeddings.extend(batch_embeddings)
+                    logger.debug(
+                        f"Embedded batch {batch_idx + 1}/{total_batches} "
+                        f"({len(batch)} texts)"
+                    )
+                    break  # Success, exit retry loop
+                except Exception as e:
+                    error_str = str(e).lower()
+                    is_rate_limit = any(
+                        ind in error_str
+                        for ind in ["429", "rate limit", "rate_limit", "too many"]
+                    )
+                    if is_rate_limit and attempt < MAX_EMBEDDING_RETRIES:
+                        logger.warning(
+                            f"Embedding rate limit hit (batch {batch_idx + 1}), "
+                            f"waiting {RATE_LIMIT_WAIT_SECONDS}s "
+                            f"(attempt {attempt}/{MAX_EMBEDDING_RETRIES})"
+                        )
+                        await asyncio.sleep(RATE_LIMIT_WAIT_SECONDS)
+                    else:
+                        logger.error(
+                            f"Embedding generation failed for batch {batch_idx + 1}: {e}"
+                        )
+                        raise
 
         return all_embeddings
 

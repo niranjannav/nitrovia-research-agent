@@ -6,6 +6,7 @@ retry, timeout, fallback, and structured output support.
 Uses pydantic-ai for guaranteed schema compliance across all providers.
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional, TypeVar
@@ -16,7 +17,13 @@ from pydantic_ai import Agent
 from pydantic_ai_litellm import LiteLLMModel
 
 from .config import GatewayConfig, ModelConfig, Provider, TaskType
-from .retry import RetryConfig, RetryStrategy, is_rate_limit_error, is_transient_error
+from .retry import (
+    RATE_LIMIT_WAIT_SECONDS,
+    RetryConfig,
+    RetryStrategy,
+    is_rate_limit_error,
+    is_transient_error,
+)
 from .router import ModelRouter
 from .token_counter import TokenCounter
 
@@ -178,7 +185,14 @@ class ModelGateway:
                 if not self.config.enable_fallbacks:
                     raise
 
-                if not is_transient_error(e) and not is_rate_limit_error(e):
+                if is_rate_limit_error(e):
+                    # Wait before trying next model (they may share org limits)
+                    logger.info(
+                        f"Rate limit hit on {model_config.model_id}, "
+                        f"waiting {RATE_LIMIT_WAIT_SECONDS}s before fallback"
+                    )
+                    await asyncio.sleep(RATE_LIMIT_WAIT_SECONDS)
+                elif not is_transient_error(e):
                     # Non-transient error, might still try fallback
                     if i == len(fallback_chain) - 1:
                         raise
@@ -250,7 +264,14 @@ class ModelGateway:
                 logger.warning(f"Model {model_config.model_id} failed: {e}")
                 if not self.config.enable_fallbacks:
                     raise
-                if i == len(fallback_chain) - 1:
+
+                if is_rate_limit_error(e):
+                    logger.info(
+                        f"Rate limit hit on {model_config.model_id}, "
+                        f"waiting {RATE_LIMIT_WAIT_SECONDS}s before fallback"
+                    )
+                    await asyncio.sleep(RATE_LIMIT_WAIT_SECONDS)
+                elif i == len(fallback_chain) - 1:
                     raise
 
         if last_error:

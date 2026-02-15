@@ -27,11 +27,6 @@ class WorkflowStep(Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
-    # Legacy steps (kept for backward compat)
-    PARSING = "parsing"
-    BUILDING_CONTEXT = "building_context"
-    PLANNING_SKILLS = "planning_skills"
-
 
 @dataclass
 class DocumentContext:
@@ -146,6 +141,10 @@ class ReportWorkflowState(TypedDict, total=False):
     # Parsed documents
     documents: list[tuple[str, str]]  # (filename, content) tuples (backward compat)
     parsed_documents: list[ParsedDocument]  # Structured parsed documents with metadata
+
+    # File registry & research notes (agent-based pipeline)
+    file_registry: list[Any]
+    research_notes: str
 
     # Research planning
     research_questions: list[str]  # Expanded questions from title + prompt

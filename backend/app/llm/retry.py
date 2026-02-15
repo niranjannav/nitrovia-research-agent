@@ -1,19 +1,21 @@
 """Retry strategy with exponential backoff for LLM calls.
 
 Provides robust retry logic for transient failures with automatic
-fallback to alternative providers.
+fallback to alternative providers. Handles rate limit (429) errors
+with longer wait times.
 """
 
 import asyncio
 import logging
 import random
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, TypeVar
 
 from tenacity import (
     AsyncRetrying,
     RetryError,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential_jitter,
 )
@@ -30,6 +32,9 @@ RETRYABLE_EXCEPTIONS = (
     asyncio.TimeoutError,
 )
 
+# Minimum wait time in seconds when a rate limit error is hit
+RATE_LIMIT_WAIT_SECONDS = 61.0
+
 
 @dataclass
 class RetryConfig:
@@ -37,7 +42,7 @@ class RetryConfig:
 
     max_retries: int = 3
     initial_delay: float = 1.0
-    max_delay: float = 60.0
+    max_delay: float = 90.0
     backoff_factor: float = 2.0
     jitter: bool = True
 
@@ -70,6 +75,10 @@ class RetryStrategy:
     ) -> T:
         """Execute a function with retry logic.
 
+        Handles rate limit (429) errors specially: waits at least 61 seconds
+        before retrying to respect per-minute rate limits. Other transient
+        errors use standard exponential backoff.
+
         Args:
             func: Async function to execute
             *args: Positional arguments for func
@@ -84,7 +93,12 @@ class RetryStrategy:
             Exception: If all retries and fallback fail
         """
         last_exception: Optional[Exception] = None
-        attempt = 0
+
+        def _should_retry(exc: BaseException) -> bool:
+            """Retry on retryable exceptions OR rate limit errors."""
+            if isinstance(exc, self.config.get_retryable_exceptions()):
+                return True
+            return is_rate_limit_error(exc) or is_transient_error(exc)
 
         try:
             async for attempt_state in AsyncRetrying(
@@ -94,15 +108,24 @@ class RetryStrategy:
                     max=self.config.max_delay,
                     jitter=self.config.max_delay / 4 if self.config.jitter else 0,
                 ),
-                retry=retry_if_exception_type(self.config.get_retryable_exceptions()),
+                retry=retry_if_exception(_should_retry),
                 reraise=True,
             ):
                 with attempt_state:
                     attempt = attempt_state.retry_state.attempt_number
                     if attempt > 1:
-                        logger.info(
-                            f"Retry attempt {attempt}/{self.config.max_retries}"
-                        )
+                        # If last error was a rate limit, wait extra time
+                        if last_exception and is_rate_limit_error(last_exception):
+                            wait_secs = _extract_retry_after(last_exception)
+                            logger.info(
+                                f"Rate limit hit, waiting {wait_secs:.0f}s "
+                                f"before retry {attempt}/{self.config.max_retries}"
+                            )
+                            await asyncio.sleep(wait_secs)
+                        else:
+                            logger.info(
+                                f"Retry attempt {attempt}/{self.config.max_retries}"
+                            )
                         if on_retry and last_exception:
                             on_retry(last_exception, attempt)
 
@@ -271,3 +294,30 @@ def is_transient_error(exception: Exception) -> bool:
         "overloaded",
     ]
     return any(indicator in error_str for indicator in transient_indicators)
+
+
+def _extract_retry_after(exception: Exception) -> float:
+    """Extract retry-after time from a rate limit error.
+
+    Looks for 'per minute' in the error to determine wait time.
+    Defaults to RATE_LIMIT_WAIT_SECONDS (61s) for per-minute limits.
+
+    Args:
+        exception: The rate limit exception
+
+    Returns:
+        Seconds to wait before retrying
+    """
+    error_str = str(exception).lower()
+
+    # Try to extract retry-after header value from error message
+    retry_after_match = re.search(r"retry.after[:\s]+(\d+)", error_str)
+    if retry_after_match:
+        return float(retry_after_match.group(1))
+
+    # Per-minute rate limits need a ~61s wait
+    if "per minute" in error_str or "per min" in error_str:
+        return RATE_LIMIT_WAIT_SECONDS
+
+    # Default: wait 61 seconds (covers most per-minute limits)
+    return RATE_LIMIT_WAIT_SECONDS

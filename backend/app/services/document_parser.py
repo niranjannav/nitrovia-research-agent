@@ -311,17 +311,105 @@ class DOCXParser(BaseDocumentParser):
 class XLSXParser(BaseDocumentParser):
     """Parser for Excel files using openpyxl.
 
-    Creates a separate document chunk per sheet tab, storing content in
-    a structured tabular format.
+    Creates document chunks per sheet tab, splitting large sheets into
+    multiple chunks to keep each within MAX_CHUNK_CHARS. The parse()
+    method produces a compact summary (headers + sample rows + stats)
+    for context building, while parse_to_document() produces properly
+    chunked content for embedding.
     """
 
+    # Max rows to scan for statistics/type inference
+    MAX_STAT_ROWS = 100
+    # Max data rows to include in sample output (parse() summary)
+    MAX_SAMPLE_ROWS = 30
+    # Max characters per sheet in the parse() summary
+    MAX_CHARS_PER_SHEET = 15_000
+    # Max total characters for the entire parse() output
+    MAX_TOTAL_CHARS = 80_000
+    # Max data rows per sheet in parse_to_document() chunks
+    MAX_DATA_ROWS = 500
+
+    def _extract_headers(
+        self,
+        sheet,
+        rows_count: int,
+    ) -> tuple[list[str], int]:
+        """Extract header row from a sheet.
+
+        Returns:
+            Tuple of (header values, header row index 1-based)
+        """
+        header_row_idx = 1
+        for row in sheet.iter_rows(min_row=1, max_row=min(5, rows_count), values_only=True):
+            row_vals = [str(c).strip() if c is not None else "" for c in row]
+            if any(v for v in row_vals):
+                return row_vals, header_row_idx
+            header_row_idx += 1
+        return [], header_row_idx
+
+    def _infer_column_types(
+        self,
+        sheet,
+        cols_count: int,
+        data_start: int,
+        rows_count: int,
+    ) -> tuple[list[str], list[list]]:
+        """Infer column data types from sample data rows.
+
+        Returns:
+            Tuple of (column types list, column values list)
+        """
+        col_types: list[str] = ["unknown"] * cols_count
+        col_values: list[list] = [[] for _ in range(cols_count)]
+
+        scan_end = min(data_start + self.MAX_STAT_ROWS, rows_count + 1)
+        for row in sheet.iter_rows(min_row=data_start, max_row=scan_end, values_only=True):
+            for ci, cell in enumerate(row):
+                if ci >= cols_count:
+                    break
+                if cell is not None:
+                    col_values[ci].append(cell)
+
+        for ci in range(cols_count):
+            vals = col_values[ci]
+            if not vals:
+                col_types[ci] = "empty"
+                continue
+            num_count = sum(1 for v in vals if isinstance(v, (int, float)))
+            str_count = sum(1 for v in vals if isinstance(v, str))
+            if num_count > len(vals) * 0.7:
+                col_types[ci] = "numeric"
+            elif str_count > len(vals) * 0.7:
+                col_types[ci] = "text"
+            else:
+                col_types[ci] = "mixed"
+
+        return col_types, col_values
+
+    def _format_row(self, row) -> str:
+        """Format a row tuple into a pipe-separated string."""
+        return " | ".join(str(cell) if cell is not None else "" for cell in row)
+
     def parse(self, file_content: bytes) -> str:
-        """Extract structured text from Excel spreadsheet."""
+        """Extract structured summary text from Excel spreadsheet.
+
+        Produces a compact representation per sheet: headers with types,
+        sample data rows (capped), column statistics, formulas, and
+        completeness warnings. Output is capped at MAX_TOTAL_CHARS.
+        """
+        from statistics import mean, median, stdev
+
         try:
             wb = load_workbook(BytesIO(file_content), data_only=True)
-            text_parts = []
+            try:
+                wb_formulas = load_workbook(BytesIO(file_content), data_only=False)
+            except Exception:
+                wb_formulas = None
 
-            for sheet_idx, sheet in enumerate(wb_data.worksheets):
+            text_parts = []
+            total_chars = 0
+
+            for sheet_idx, sheet in enumerate(wb.worksheets):
                 rows_count = sheet.max_row or 0
                 cols_count = sheet.max_column or 0
 
@@ -330,43 +418,12 @@ class XLSXParser(BaseDocumentParser):
 
                 section = [f"[Sheet: {sheet.title} | {rows_count} rows × {cols_count} cols]"]
 
-                # --- Extract headers (first non-empty row) ---
-                headers: list[str] = []
-                header_row_idx = 1
-                for row in sheet.iter_rows(min_row=1, max_row=min(5, rows_count), values_only=True):
-                    row_vals = [str(c).strip() if c is not None else "" for c in row]
-                    if any(v for v in row_vals):
-                        headers = row_vals
-                        break
-                    header_row_idx += 1
-
-                # --- Infer column data types from first 100 data rows ---
-                col_types: list[str] = ["unknown"] * cols_count
-                col_values: list[list] = [[] for _ in range(cols_count)]
-
+                headers, header_row_idx = self._extract_headers(sheet, rows_count)
                 data_start = header_row_idx + 1
-                scan_end = min(data_start + self.MAX_STAT_ROWS, rows_count + 1)
 
-                for row in sheet.iter_rows(min_row=data_start, max_row=scan_end, values_only=True):
-                    for ci, cell in enumerate(row):
-                        if ci >= cols_count:
-                            break
-                        if cell is not None:
-                            col_values[ci].append(cell)
-
-                for ci in range(cols_count):
-                    vals = col_values[ci]
-                    if not vals:
-                        col_types[ci] = "empty"
-                        continue
-                    num_count = sum(1 for v in vals if isinstance(v, (int, float)))
-                    str_count = sum(1 for v in vals if isinstance(v, str))
-                    if num_count > len(vals) * 0.7:
-                        col_types[ci] = "numeric"
-                    elif str_count > len(vals) * 0.7:
-                        col_types[ci] = "text"
-                    else:
-                        col_types[ci] = "mixed"
+                col_types, col_values = self._infer_column_types(
+                    sheet, cols_count, data_start, rows_count
+                )
 
                 # --- Headers with types ---
                 if headers:
@@ -376,21 +433,23 @@ class XLSXParser(BaseDocumentParser):
                     )
                     section.append(f"Headers: {header_line}")
 
-                # --- Data sample ---
+                # --- Data sample (capped) ---
                 section.append("")
                 section.append("Data:")
                 sample_end = min(data_start + self.MAX_SAMPLE_ROWS, rows_count + 1)
+                sheet_data_chars = 0
                 for row in sheet.iter_rows(min_row=data_start, max_row=sample_end, values_only=True):
-                    row_values = [
-                        str(cell) if cell is not None else ""
-                        for cell in row
-                    ]
-                    row_text = " | ".join(row_values)
+                    row_text = self._format_row(row)
                     if row_text.strip(" |"):
                         section.append(row_text)
+                        sheet_data_chars += len(row_text)
+                        if sheet_data_chars > self.MAX_CHARS_PER_SHEET:
+                            section.append("... (sheet output truncated)")
+                            break
 
-                if rows_count > data_start + self.MAX_SAMPLE_ROWS:
-                    section.append(f"... ({rows_count - data_start - self.MAX_SAMPLE_ROWS} more rows)")
+                remaining = rows_count - (sample_end - data_start) - data_start + 1
+                if remaining > 0:
+                    section.append(f"... ({remaining} more rows)")
 
                 # --- Per-column statistics for numeric columns ---
                 stats_lines = []
@@ -428,8 +487,7 @@ class XLSXParser(BaseDocumentParser):
                     ):
                         for cell in row:
                             if cell.value and isinstance(cell.value, str) and cell.value.startswith("="):
-                                coord = cell.coordinate
-                                formulas_found.append(f"  {coord}: {cell.value}")
+                                formulas_found.append(f"  {cell.coordinate}: {cell.value}")
                                 if len(formulas_found) >= 20:
                                     break
                         if len(formulas_found) >= 20:
@@ -441,9 +499,10 @@ class XLSXParser(BaseDocumentParser):
                         section.extend(formulas_found)
 
                 # --- Empty-cell analysis ---
-                empty_lines = []
-                total_data_rows = min(scan_end - data_start, rows_count)
+                scan_end_stat = min(data_start + self.MAX_STAT_ROWS, rows_count + 1)
+                total_data_rows = min(scan_end_stat - data_start, rows_count)
                 if total_data_rows > 0:
+                    empty_lines = []
                     for ci in range(cols_count):
                         empty_count = total_data_rows - len(col_values[ci])
                         if empty_count > 0:
@@ -452,14 +511,26 @@ class XLSXParser(BaseDocumentParser):
                                 header_name = headers[ci] if ci < len(headers) and headers[ci] else f"Col{ci+1}"
                                 empty_lines.append(f"  {header_name}: {pct:.0f}% empty")
 
-                if empty_lines:
-                    section.append("")
-                    section.append("Data completeness warnings:")
-                    section.extend(empty_lines)
+                    if empty_lines:
+                        section.append("")
+                        section.append("Data completeness warnings:")
+                        section.extend(empty_lines)
 
-                text_parts.append("\n".join(section))
+                sheet_text = "\n".join(section)
+                text_parts.append(sheet_text)
+                total_chars += len(sheet_text)
 
-            wb_data.close()
+                # Stop processing more sheets if we've hit the overall cap
+                if total_chars >= self.MAX_TOTAL_CHARS:
+                    remaining_sheets = len(wb.worksheets) - sheet_idx - 1
+                    if remaining_sheets > 0:
+                        text_parts.append(
+                            f"... ({remaining_sheets} more sheet(s) omitted, "
+                            f"output capped at {self.MAX_TOTAL_CHARS} chars)"
+                        )
+                    break
+
+            wb.close()
             if wb_formulas:
                 wb_formulas.close()
 
@@ -476,71 +547,78 @@ class XLSXParser(BaseDocumentParser):
         user_id: str,
         source_file_id: str | None = None,
     ) -> ParsedDocument:
-        """Parse Excel into structured document with per-sheet chunks."""
+        """Parse Excel into structured document with properly-sized chunks.
+
+        Each sheet is split into one or more chunks, each capped at
+        MAX_CHUNK_CHARS. The raw_text is a compact summary (from parse())
+        suitable for context building without token explosion.
+        """
         try:
             wb = load_workbook(BytesIO(file_content), data_only=True)
             chunks: list[DocumentChunk] = []
+
+            # Generate compact summary for raw_text (used by build_context)
             raw_text = self.parse(file_content)
             description = generate_description(raw_text)
 
             for sheet in wb.worksheets:
-                sheet_text = [f"[Sheet: {sheet.title}]"]
+                rows_count = sheet.max_row or 0
+                cols_count = sheet.max_column or 0
+                if rows_count == 0 or cols_count == 0:
+                    continue
 
-                for row in sheet.iter_rows(values_only=True):
-                    # Filter out empty cells and format row
-                    row_values = [
-                        str(cell) if cell is not None else ""
-                        for cell in row
-                    ]
-                    row_text = " | ".join(row_values)
-                    if row_text.strip(" |"):
-                        sheet_text.append(row_text)
+                headers, header_row_idx = self._extract_headers(sheet, rows_count)
+                data_start = header_row_idx + 1
+                header_text = self._format_row(headers) if headers else ""
 
-                if len(sheet_text) > 1:  # More than just the header
-                    text_parts.append("\n".join(sheet_text))
+                sheet_prefix = f"[Sheet: {sheet.title}]\n"
+                if header_text:
+                    sheet_prefix += f"Headers: {header_text}\n"
 
-            wb.close()
-            return "\n\n".join(text_parts)
+                # Iterate data rows, splitting into chunks at MAX_CHUNK_CHARS
+                current_lines: list[str] = []
+                current_chars = len(sheet_prefix)
+                rows_emitted = 0
+                max_rows = min(
+                    rows_count - data_start + 1,
+                    self.MAX_DATA_ROWS,
+                )
 
-        except Exception as e:
-            logger.error(f"XLSX parsing error: {e}")
-            raise ValueError(f"Failed to parse Excel file: {str(e)}")
+                for row in sheet.iter_rows(
+                    min_row=data_start,
+                    max_row=data_start + max_rows - 1,
+                    values_only=True,
+                ):
+                    row_text = self._format_row(row)
+                    if not row_text.strip(" |"):
+                        continue
 
-    def parse_to_document(
-        self,
-        file_content: bytes,
-        file_name: str,
-        user_id: str,
-        source_file_id: str | None = None,
-    ) -> ParsedDocument:
-        """Parse Excel into structured document with per-sheet chunks."""
-        try:
-            wb = load_workbook(BytesIO(file_content), data_only=True)
-            chunks: list[DocumentChunk] = []
-            raw_text = self.parse(file_content)
-            description = generate_description(raw_text)
+                    row_len = len(row_text) + 1  # +1 for newline
+                    # If adding this row exceeds the chunk limit, flush
+                    if current_chars + row_len > MAX_CHUNK_CHARS and current_lines:
+                        content = sheet_prefix + "\n".join(current_lines)
+                        metadata = self._create_metadata(
+                            file_name=file_name,
+                            user_id=user_id,
+                            description=description,
+                            source_file_id=source_file_id,
+                            chunk_index=len(chunks),
+                            sheet_name=sheet.title,
+                        )
+                        chunks.append(DocumentChunk(content=content, metadata=metadata))
+                        current_lines = []
+                        current_chars = len(sheet_prefix)
 
-            for sheet in wb.worksheets:
-                rows_text: list[str] = []
-                header_row = None
+                    current_lines.append(row_text)
+                    current_chars += row_len
+                    rows_emitted += 1
 
-                for row_idx, row in enumerate(sheet.iter_rows(values_only=True)):
-                    row_values = [
-                        str(cell) if cell is not None else ""
-                        for cell in row
-                    ]
-                    row_text = " | ".join(row_values)
-                    if row_text.strip(" |"):
-                        if row_idx == 0:
-                            header_row = row_text
-                        rows_text.append(row_text)
-
-                if rows_text:
-                    sheet_content = f"[Sheet: {sheet.title}]\n"
-                    if header_row:
-                        sheet_content += f"Headers: {header_row}\n"
-                    sheet_content += "\n".join(rows_text)
-
+                # Flush remaining rows for this sheet
+                if current_lines:
+                    remaining = rows_count - data_start + 1 - rows_emitted
+                    if remaining > 0:
+                        current_lines.append(f"... ({remaining} more rows)")
+                    content = sheet_prefix + "\n".join(current_lines)
                     metadata = self._create_metadata(
                         file_name=file_name,
                         user_id=user_id,
@@ -549,7 +627,7 @@ class XLSXParser(BaseDocumentParser):
                         chunk_index=len(chunks),
                         sheet_name=sheet.title,
                     )
-                    chunks.append(DocumentChunk(content=sheet_content, metadata=metadata))
+                    chunks.append(DocumentChunk(content=content, metadata=metadata))
 
             wb.close()
 
@@ -566,6 +644,11 @@ class XLSXParser(BaseDocumentParser):
             # Update total_chunks
             for chunk in chunks:
                 chunk.metadata.total_chunks = len(chunks)
+
+            logger.info(
+                f"XLSX parsed: {file_name} -> {len(chunks)} chunks, "
+                f"raw_text={len(raw_text)} chars"
+            )
 
             return ParsedDocument(
                 file_name=file_name,

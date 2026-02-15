@@ -4,6 +4,7 @@ Generates research questions from the title/prompt, performs similarity
 search against pgvector, and assembles the retrieved context.
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -27,6 +28,12 @@ settings = get_settings()
 
 # Number of top results per question
 TOP_K_PER_QUESTION = 5
+# Delay between similarity search queries (seconds)
+SEARCH_DELAY_SECONDS = 0.5
+# Maximum tokens to include in retrieved context (stay well under rate limits)
+MAX_CONTEXT_TOKENS = 25_000
+# Maximum characters for fallback raw document context
+MAX_RAW_CONTEXT_CHARS = 80_000
 
 
 async def retrieve_context_node(state: ReportWorkflowState) -> ReportWorkflowState:
@@ -112,7 +119,11 @@ async def retrieve_context_node(state: ReportWorkflowState) -> ReportWorkflowSta
         all_results: list[dict[str, Any]] = []
         seen_contents: set[int] = set()
 
-        for question in research_plan.questions:
+        for q_idx, question in enumerate(research_plan.questions):
+            # Delay between search calls to avoid embedding rate limits
+            if q_idx > 0:
+                await asyncio.sleep(SEARCH_DELAY_SECONDS)
+
             try:
                 results = await embedding_service.similarity_search(
                     query=question,
@@ -201,6 +212,9 @@ def _build_context_from_results(
 ) -> PreparedContext:
     """Build PreparedContext from similarity search results.
 
+    Caps total context at MAX_CONTEXT_TOKENS to avoid exceeding rate limits
+    when passed to the LLM for report generation.
+
     Args:
         results: List of search result dicts with 'content' and 'metadata'
         parsed_documents: Original parsed documents for reference
@@ -225,6 +239,22 @@ def _build_context_from_results(
     for file_name, contents in file_groups.items():
         combined = "\n\n---\n\n".join(contents)
         token_count = len(combined) // 4  # Rough estimate
+
+        # Stop adding more content if we'd exceed the budget
+        if total_tokens + token_count > MAX_CONTEXT_TOKENS:
+            # Truncate this document to fit remaining budget
+            remaining_tokens = MAX_CONTEXT_TOKENS - total_tokens
+            if remaining_tokens > 500:  # Only add if meaningful amount fits
+                max_chars = remaining_tokens * 4
+                combined = combined[:max_chars]
+                token_count = remaining_tokens
+            else:
+                logger.info(
+                    f"Skipping {file_name} to stay within context budget "
+                    f"({total_tokens}/{MAX_CONTEXT_TOKENS} tokens used)"
+                )
+                continue
+
         doc_contexts.append(
             DocumentContext(
                 file_name=file_name,
@@ -255,6 +285,9 @@ def _build_context_from_raw_documents(
 ) -> PreparedContext:
     """Build PreparedContext from raw document tuples (fallback).
 
+    Truncates content per file and in total to stay within
+    MAX_CONTEXT_TOKENS, avoiding rate limit errors during report generation.
+
     Args:
         documents: List of (filename, content) tuples
         parsed_documents: Original parsed documents
@@ -272,8 +305,32 @@ def _build_context_from_raw_documents(
     elif documents:
         sources = documents
 
+    # Calculate per-file char budget to distribute evenly
+    num_files = len(sources) or 1
+    per_file_char_budget = min(
+        MAX_RAW_CONTEXT_CHARS // num_files,
+        MAX_CONTEXT_TOKENS * 4 // num_files,
+    )
+
     for file_name, content in sources:
+        # Truncate if needed
+        if len(content) > per_file_char_budget:
+            content = content[:per_file_char_budget] + f"\n\n[... truncated, {len(content) - per_file_char_budget} chars omitted ...]"
+            logger.info(
+                f"Truncated {file_name} to {per_file_char_budget} chars "
+                f"for context budget"
+            )
+
         token_count = len(content) // 4
+
+        if total_tokens + token_count > MAX_CONTEXT_TOKENS:
+            remaining = MAX_CONTEXT_TOKENS - total_tokens
+            if remaining > 500:
+                content = content[: remaining * 4]
+                token_count = remaining
+            else:
+                break
+
         doc_contexts.append(
             DocumentContext(
                 file_name=file_name,
@@ -292,6 +349,6 @@ def _build_context_from_raw_documents(
     return PreparedContext(
         documents=doc_contexts,
         total_tokens=total_tokens,
-        was_summarized=False,
+        was_summarized=True,  # Mark as summarized since content was truncated
         combined_content=combined_content,
     )

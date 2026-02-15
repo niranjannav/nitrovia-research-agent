@@ -26,10 +26,11 @@ settings = get_settings()
 # Prompts directory
 PROMPTS_DIR = Path(__file__).parent.parent.parent.parent / "prompts"
 
-# Context thresholds
-MAX_CONTEXT_TOKENS = 150_000
-SUMMARIZE_THRESHOLD = 100_000
-SUMMARIZE_DOC_THRESHOLD = 10_000
+# Context thresholds - lowered to stay within per-minute rate limits
+# (org rate limit is 30K tokens/min for Sonnet, 50K for Haiku)
+MAX_CONTEXT_TOKENS = 25_000
+SUMMARIZE_THRESHOLD = 20_000
+SUMMARIZE_DOC_THRESHOLD = 8_000
 
 
 def _load_summarization_prompt() -> str:
@@ -248,4 +249,4 @@ def _combine_documents(docs: list[DocumentContext]) -> str:
     for doc in docs:
         parts.append(f"=== DOCUMENT: {doc.file_name} ===\n\n{doc.content}")
 
-    return "\n\n" + "=" * 50 + "\n\n".join(parts)
+    return "\n\n" + ("\n\n" + "=" * 50 + "\n\n").join(parts)

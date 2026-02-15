@@ -107,15 +107,18 @@ class LLMService:
         import os
 
         # Set API key in environment for LiteLLM
+        # Always use Anthropic Sonnet for generation tasks.
+        # OpenAI is only used for embeddings (see embedding_service.py).
         if provider == "anthropic":
             os.environ["ANTHROPIC_API_KEY"] = api_key
-            self.model_string = "anthropic/claude-sonnet-4-20250514"
         elif provider == "openai":
+            # Accept openai provider for backward compat, but still
+            # route generation tasks through Anthropic Sonnet.
             os.environ["OPENAI_API_KEY"] = api_key
-            self.model_string = "openai/gpt-4o"
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
 
+        self.model_string = self.DEFAULT_MODEL  # Always Anthropic Sonnet
         self.model = LiteLLMModel(self.model_string)
 
     def generate_report(

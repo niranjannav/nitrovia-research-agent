@@ -69,7 +69,7 @@ class ResearchPlanner:
     ) -> ResearchPlan:
         """Generate a research plan with expanded questions.
 
-        Uses a low-cost model (Haiku/GPT-4o-mini) to generate questions
+        Uses a low-cost model (Haiku) to generate questions
         that will drive the similarity search.
 
         Args:

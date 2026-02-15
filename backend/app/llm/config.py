@@ -93,14 +93,16 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
 }
 
 # Default routing table: task -> ordered list of model keys (primary, fallbacks)
+# Only Anthropic models are used for generation tasks.
+# OpenAI is reserved for embeddings only (see embedding_service.py).
 DEFAULT_ROUTING_TABLE: dict[TaskType, list[str]] = {
-    TaskType.SUMMARIZATION: ["claude-3-5-haiku", "gpt-4o-mini"],
-    TaskType.REPORT_GENERATION: ["claude-sonnet-4", "gpt-4o"],
-    TaskType.PRESENTATION_GEN: ["claude-sonnet-4", "gpt-4o"],
-    TaskType.SECTION_EDIT: ["claude-sonnet-4", "gpt-4o-mini"],
-    TaskType.CLASSIFICATION: ["claude-3-5-haiku", "gpt-4o-mini"],
-    TaskType.SKILL_PLANNING: ["claude-3-5-haiku", "gpt-4o-mini"],
-    TaskType.RESEARCH: ["claude-sonnet-4", "gpt-4o"],
+    TaskType.SUMMARIZATION: ["claude-3-5-haiku", "claude-sonnet-4"],
+    TaskType.REPORT_GENERATION: ["claude-sonnet-4", "claude-3-5-haiku"],
+    TaskType.PRESENTATION_GEN: ["claude-sonnet-4", "claude-3-5-haiku"],
+    TaskType.SECTION_EDIT: ["claude-sonnet-4", "claude-3-5-haiku"],
+    TaskType.CLASSIFICATION: ["claude-3-5-haiku", "claude-sonnet-4"],
+    TaskType.SKILL_PLANNING: ["claude-3-5-haiku", "claude-sonnet-4"],
+    TaskType.RESEARCH: ["claude-sonnet-4", "claude-3-5-haiku"],
 }
 
 
