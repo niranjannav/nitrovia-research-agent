@@ -10,7 +10,7 @@ import ReportEditor from '../components/reports/ReportEditor'
 type Step = 'upload' | 'configure' | 'generating' | 'editing'
 
 export default function NewReportPage() {
-  const navigate = useNavigate()
+  const _navigate = useNavigate()
   const {
     selectedFiles,
     generateReport,
@@ -105,14 +105,14 @@ export default function NewReportPage() {
               stepNumber={2}
               label="Configure"
               isActive={step === 'configure'}
-              isCompleted={step === 'generating' || step === 'editing'}
+              isCompleted={step === 'generating'}
             />
             <div className="flex-1 mx-4 h-px bg-gray-200" />
             <StepIndicator
               stepNumber={3}
               label="Generate"
               isActive={step === 'generating'}
-              isCompleted={step === 'editing'}
+              isCompleted={false}
             />
           </div>
         </div>

@@ -41,7 +41,7 @@ export interface Report {
   completed_at: string | null
 }
 
-export interface ReportStatus {
+export interface ReportStatusResponse {
   status: string
   progress: number
   current_step: string
