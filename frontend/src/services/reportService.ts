@@ -4,6 +4,8 @@ import type {
   ReportConfig,
   GenerateReportResponse,
   ReportListResponse,
+  EditSectionResponse,
+  GeneratedContent,
 } from '../types/report'
 
 interface ReportStatusResponse {
@@ -47,5 +49,24 @@ export const reportService = {
 
   async deleteReport(reportId: string): Promise<void> {
     await api.delete(`/reports/${reportId}`)
+  },
+
+  async editSection(
+    reportId: string,
+    sectionPath: string,
+    instructions: string
+  ): Promise<EditSectionResponse> {
+    const response = await api.patch<EditSectionResponse>(
+      `/reports/${reportId}/sections/${sectionPath}`,
+      { instructions }
+    )
+    return response.data
+  },
+
+  async getGeneratedContent(reportId: string): Promise<GeneratedContent | null> {
+    const response = await api.get<Report>(`/reports/${reportId}`)
+    // The generated_content is included in the report response
+    return (response.data as unknown as { generated_content: GeneratedContent })
+      .generated_content
   },
 }

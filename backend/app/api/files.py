@@ -1,5 +1,7 @@
 """File upload and Google Drive integration routes."""
 
+import logging
+import math
 import uuid
 from typing import Annotated
 
@@ -11,10 +13,14 @@ from app.models.schemas import (
     DriveFileListResponse,
     DriveSelectRequest,
     DriveSelectResponse,
+    FileListResponse,
     FileUploadResponse,
+    SourceFileResponse,
 )
 from app.services.google_drive import GoogleDriveService
 from app.services.supabase import get_supabase_client
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 settings = get_settings()
@@ -41,7 +47,11 @@ async def upload_file(
     current_user: CurrentUser,
     file: Annotated[UploadFile, File(description="File to upload")],
 ):
-    """Upload a file for report generation."""
+    """Upload a file for report generation.
+
+    If a file with the same name and size already exists for this user,
+    returns the existing file instead of creating a duplicate.
+    """
     # Validate file extension
     extension = get_file_extension(file.filename or "")
     if extension not in ALLOWED_EXTENSIONS:
@@ -58,11 +68,32 @@ async def upload_file(
             detail=f"File too large. Maximum size: {settings.max_file_size_mb}MB",
         )
 
-    # Generate unique storage path
+    supabase = get_supabase_client()
+
+    # Check for existing duplicate (same filename + file size for this user)
+    existing = supabase.table("source_files").select("*").eq(
+        "user_id", current_user.id
+    ).eq(
+        "file_name", file.filename
+    ).eq(
+        "file_size", len(content)
+    ).execute()
+
+    if existing.data:
+        # Return existing file instead of creating duplicate
+        existing_file = existing.data[0]
+        logger.info(f"[FILES] User {current_user.id} | Returning existing file: {existing_file['id']} ({file.filename})")
+        return FileUploadResponse(
+            file_id=existing_file["id"],
+            file_name=existing_file["file_name"],
+            file_type=existing_file["file_type"],
+            file_size=existing_file["file_size"],
+            storage_path=existing_file["storage_path"],
+        )
+
+    # Generate unique storage path for new file
     file_id = str(uuid.uuid4())
     storage_path = f"{current_user.id}/{file_id}{extension}"
-
-    supabase = get_supabase_client()
 
     try:
         # Upload to Supabase Storage
@@ -84,6 +115,8 @@ async def upload_file(
             "parsing_status": "pending",
         }).execute()
 
+        logger.info(f"[FILES] User {current_user.id} | Uploaded new file: {file_id} ({file.filename})")
+
         return FileUploadResponse(
             file_id=file_id,
             file_name=file.filename,
@@ -96,6 +129,56 @@ async def upload_file(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to upload file: {str(e)}",
+        )
+
+
+@router.get("/list", response_model=FileListResponse)
+async def list_user_files(
+    current_user: CurrentUser,
+    page: Annotated[int, Query(ge=1, description="Page number")] = 1,
+    limit: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+):
+    """
+    List all files uploaded by the current user.
+
+    Files can be reused across multiple reports.
+    """
+    supabase = get_supabase_client()
+
+    try:
+        # Count total files for the user
+        count_result = supabase.table("source_files").select(
+            "id", count="exact"
+        ).eq("user_id", current_user.id).execute()
+
+        total = count_result.count or 0
+
+        # Get paginated files
+        offset = (page - 1) * limit
+        files_result = supabase.table("source_files").select(
+            "id, file_name, file_type, file_size, source, storage_path, parsing_status, created_at"
+        ).eq(
+            "user_id", current_user.id
+        ).order(
+            "created_at", desc=True
+        ).range(offset, offset + limit - 1).execute()
+
+        files = [SourceFileResponse(**f) for f in files_result.data]
+
+        logger.info(f"[FILES] User {current_user.id} | Listed {len(files)} files (page {page})")
+
+        return FileListResponse(
+            files=files,
+            total=total,
+            page=page,
+            pages=math.ceil(total / limit) if total > 0 else 1,
+        )
+
+    except Exception as e:
+        logger.error(f"[FILES] User {current_user.id} | Failed to list files: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list files: {str(e)}",
         )
 
 
@@ -161,7 +244,27 @@ async def select_drive_files(
             if len(content) > settings.max_file_size_bytes:
                 continue  # Skip files that are too large
 
-            # Generate unique storage path
+            # Check for existing duplicate (same filename + file size for this user)
+            existing = supabase.table("source_files").select("*").eq(
+                "user_id", current_user.id
+            ).eq(
+                "file_name", filename
+            ).eq(
+                "file_size", len(content)
+            ).execute()
+
+            if existing.data:
+                # Return existing file instead of creating duplicate
+                existing_file = existing.data[0]
+                logger.info(f"[FILES] User {current_user.id} | Returning existing file from Drive: {existing_file['id']} ({filename})")
+                selected_files.append({
+                    "file_id": existing_file["id"],
+                    "file_name": filename,
+                    "status": "existing",
+                })
+                continue
+
+            # Generate unique storage path for new file
             file_id = str(uuid.uuid4())
             storage_path = f"{current_user.id}/{file_id}{extension}"
 
@@ -184,6 +287,8 @@ async def select_drive_files(
                 "google_drive_id": drive_file_id,
                 "parsing_status": "pending",
             }).execute()
+
+            logger.info(f"[FILES] User {current_user.id} | Imported new file from Drive: {file_id} ({filename})")
 
             selected_files.append({
                 "file_id": file_id,

@@ -2,9 +2,16 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Copy ONLY package files first for better caching
 COPY package*.json ./
-RUN npm install
 
+# Install dependencies with npm cache mounting
+# This layer only rebuilds if package.json or package-lock.json changes
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline --no-audit
+
+# Copy application code LAST
+# Code changes won't invalidate npm install layer
 COPY . .
 
 EXPOSE 5173

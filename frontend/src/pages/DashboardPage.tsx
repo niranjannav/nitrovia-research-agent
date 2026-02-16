@@ -178,29 +178,53 @@ export default function DashboardPage() {
         ) : (
           <ul className="divide-y divide-gray-100">
             {recentReports.map((report) => (
-              <li key={report.id} className="px-6 py-4 hover:bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">
-                      {report.title || 'Untitled Report'}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {new Date(report.created_at || '').toLocaleDateString()} •{' '}
-                      {report.detail_level}
-                    </p>
+              <li key={report.id}>
+                <Link
+                  to={report.status === 'completed' ? `/reports/${report.id}` : '#'}
+                  className={`block px-6 py-4 hover:bg-gray-50 transition-colors ${
+                    report.status === 'completed' ? 'cursor-pointer' : 'cursor-default'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-gray-900">
+                        {report.title || 'Untitled Report'}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {new Date(report.created_at || '').toLocaleDateString()} •{' '}
+                        {report.detail_level}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          report.status === 'completed'
+                            ? 'bg-green-100 text-green-700'
+                            : report.status === 'failed'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
+                        {report.status}
+                      </span>
+                      {report.status === 'completed' && (
+                        <svg
+                          className="w-5 h-5 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 5l7 7-7 7"
+                          />
+                        </svg>
+                      )}
+                    </div>
                   </div>
-                  <span
-                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      report.status === 'completed'
-                        ? 'bg-green-100 text-green-700'
-                        : report.status === 'failed'
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-yellow-100 text-yellow-700'
-                    }`}
-                  >
-                    {report.status}
-                  </span>
-                </div>
+                </Link>
               </li>
             ))}
           </ul>

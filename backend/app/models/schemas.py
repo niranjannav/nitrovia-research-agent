@@ -95,6 +95,31 @@ class DriveSelectResponse(BaseModel):
     files: list[DriveSelectedFile]
 
 
+class SourceFileResponse(BaseModel):
+    """Source file information for listing."""
+
+    id: str
+    file_name: str
+    file_type: str
+    file_size: int | None = None
+    source: str
+    storage_path: str | None = None
+    parsing_status: str | None = None
+    created_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class FileListResponse(BaseModel):
+    """Paginated list of user files."""
+
+    files: list[SourceFileResponse]
+    total: int
+    page: int
+    pages: int
+
+
 # ============================================
 # Report Schemas
 # ============================================
@@ -159,6 +184,7 @@ class ReportResponse(BaseModel):
     source_files: list[dict] | None = None
     output_files: list[OutputFile] | None = None
     error_message: str | None = None
+    generated_content: dict | None = None
     total_input_tokens: int | None = None
     total_output_tokens: int | None = None
     generation_time_seconds: int | None = None
@@ -214,12 +240,31 @@ class GeneratedReport(BaseModel):
 class PresentationSlide(BaseModel):
     """A slide in the generated presentation."""
 
-    type: Literal["title", "section", "content", "key_findings", "recommendations", "closing"]
+    type: Literal[
+        "title", "section", "content", "key_findings",
+        "stat_callout", "comparison", "timeline", "chart",
+        "recommendations", "closing",
+    ]
     title: str
     subtitle: str | None = None
     bullets: list[str] | None = None
     findings: list[str] | None = None
     items: list[str] | None = None
+    # stat_callout
+    stat_value: str | None = None
+    stat_context: str | None = None
+    # comparison
+    left_items: list[str] | None = None
+    right_items: list[str] | None = None
+    left_label: str | None = None
+    right_label: str | None = None
+    # timeline
+    events: list[dict[str, str]] | None = None
+    # chart
+    chart_type: str | None = None
+    chart_title: str | None = None
+    data_labels: list[str] | None = None
+    data_values: list[float] | None = None
     contact: str | None = None
     notes: str | None = None
 
@@ -229,3 +274,23 @@ class GeneratedPresentation(BaseModel):
 
     title: str
     slides: list[PresentationSlide]
+
+
+# ============================================
+# Section Editing Schemas
+# ============================================
+
+
+class EditSectionRequest(BaseModel):
+    """Request to edit a specific section of a report."""
+
+    instructions: str = Field(min_length=1, max_length=5000)
+
+
+class EditSectionResponse(BaseModel):
+    """Response after editing a section."""
+
+    section_path: str
+    old_content: str
+    new_content: str
+    applied_at: datetime

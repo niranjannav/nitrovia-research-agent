@@ -28,6 +28,11 @@ class Settings(BaseSettings):
 
     # LLM
     anthropic_api_key: str
+    openai_api_key: str | None = None
+
+    # Embedding model for pgvector
+    embedding_model: str = "text-embedding-3-small"
+    embedding_provider: str = "openai"
 
     # CORS
     cors_origins: str = "http://localhost:5173"

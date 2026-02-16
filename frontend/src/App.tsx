@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import NewReportPage from './pages/NewReportPage'
 import ReportHistoryPage from './pages/ReportHistoryPage'
+import ReportViewPage from './pages/ReportViewPage'
 
 function App() {
   const { checkAuth, isLoading } = useAuthStore()
@@ -32,6 +33,7 @@ function App() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/reports/new" element={<NewReportPage />} />
           <Route path="/reports" element={<ReportHistoryPage />} />
+          <Route path="/reports/:reportId" element={<ReportViewPage />} />
         </Route>
       </Route>
 

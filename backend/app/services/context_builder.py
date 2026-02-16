@@ -2,10 +2,34 @@
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 from anthropic import Anthropic
 
 logger = logging.getLogger(__name__)
+
+# Prompts directory
+PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
+
+
+def load_summarization_prompt() -> str:
+    """Load the summarization prompt template."""
+    prompt_file = PROMPTS_DIR / "context_summarization.txt"
+    if prompt_file.exists():
+        return prompt_file.read_text(encoding="utf-8")
+
+    # Fallback prompt
+    return """Summarize this document comprehensively, preserving:
+- Key facts and figures
+- Main arguments and conclusions
+- Important quotes or data points
+- Structure and flow of ideas
+
+Be thorough but concise. Maintain the document's original meaning and intent.
+
+DOCUMENT: {filename}
+---
+{content}"""
 
 
 @dataclass
@@ -125,30 +149,23 @@ class ContextBuilder:
         Uses Haiku for cost-effective summarization.
         """
         try:
+            # Load prompt from external file
+            prompt_template = load_summarization_prompt()
+            prompt = prompt_template.format(filename=filename, content=content)
+
+            logger.info(f"[CONTEXT] Summarizing document: {filename}")
+
             response = self.client.messages.create(
                 model="claude-3-5-haiku-20241022",
                 max_tokens=3000,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": f"""Summarize this document comprehensively, preserving:
-- Key facts and figures
-- Main arguments and conclusions
-- Important quotes or data points
-- Structure and flow of ideas
-
-Be thorough but concise. Maintain the document's original meaning and intent.
-
-DOCUMENT: {filename}
----
-{content}""",
-                    }
-                ],
+                messages=[{"role": "user", "content": prompt}],
             )
+
+            logger.info(f"[CONTEXT] Document summarized: {filename}")
             return f"[Summarized from {filename}]\n\n{response.content[0].text}"
 
         except Exception as e:
-            logger.error(f"Failed to summarize {filename}: {e}")
+            logger.error(f"[CONTEXT] Failed to summarize {filename}: {e}")
             # Return truncated content as fallback
             max_chars = self.SUMMARIZE_DOC_THRESHOLD * 4
             return f"[Truncated: {filename}]\n\n{content[:max_chars]}..."
