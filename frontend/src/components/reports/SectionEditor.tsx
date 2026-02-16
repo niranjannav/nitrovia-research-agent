@@ -10,7 +10,7 @@ interface SectionEditorProps {
 }
 
 export default function SectionEditor({
-  reportId,
+  reportId: _reportId,
   selectedPath,
   report,
 }: SectionEditorProps) {
