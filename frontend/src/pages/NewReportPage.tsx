@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useReportStore } from '../stores/reportStore'
 import FileUploader from '../components/files/FileUploader'
 import FileList from '../components/files/FileList'
@@ -10,7 +9,6 @@ import ReportEditor from '../components/reports/ReportEditor'
 type Step = 'upload' | 'configure' | 'generating' | 'editing'
 
 export default function NewReportPage() {
-  const _navigate = useNavigate()
   const {
     selectedFiles,
     generateReport,
