@@ -6,7 +6,9 @@ from datetime import datetime
 from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.api.deps import CurrentUser
 from app.config import get_settings
@@ -20,29 +22,57 @@ from app.models.schemas import (
     ReportStatusResponse,
 )
 from app.services.llm_service import LLMService
+from app.services.quota import get_generation_limiter, get_quota_status
 from app.services.report_generator import ReportGeneratorService
 from app.services.supabase import get_supabase_client
 
 router = APIRouter()
 settings = get_settings()
 logger = logging.getLogger(__name__)
-
+limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/generate", response_model=GenerateReportResponse)
+@limiter.limit("2/minute")
 async def generate_report(
+    request: Request,
     current_user: CurrentUser,
-    request: GenerateReportRequest,
+    body: GenerateReportRequest,
     background_tasks: BackgroundTasks,
 ):
     """Start report generation from uploaded files."""
+    # --- Quota check ---
+    if not current_user.is_admin:
+        quota = get_quota_status(
+            current_user.id, current_user.monthly_report_limit, current_user.is_admin,
+        )
+        if quota.exceeded:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Monthly report limit reached ({quota.used}/{quota.limit}). "
+                    f"Resets on {quota.resets_at[:10]}."
+                ),
+            )
+
+    # --- Concurrent generation check ---
+    gen_limiter = get_generation_limiter()
+    if not await gen_limiter.acquire():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                f"Server is busy — {gen_limiter.active_count} report(s) currently generating. "
+                "Please try again in a few minutes."
+            ),
+        )
+
     # Validate file count
-    if len(request.source_file_ids) == 0:
+    if len(body.source_file_ids) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one source file is required",
         )
 
-    if len(request.source_file_ids) > settings.max_files_per_report:
+    if len(body.source_file_ids) > settings.max_files_per_report:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Too many files. Maximum: {settings.max_files_per_report}",
@@ -50,7 +80,7 @@ async def generate_report(
 
     # Validate output formats
     valid_formats = {"pdf", "docx", "pptx"}
-    if not all(fmt in valid_formats for fmt in request.output_formats):
+    if not all(fmt in valid_formats for fmt in body.output_formats):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid output format. Allowed: {', '.join(valid_formats)}",
@@ -59,7 +89,7 @@ async def generate_report(
     supabase = get_supabase_client()
 
     # Verify all source files exist and belong to user
-    for file_id in request.source_file_ids:
+    for file_id in body.source_file_ids:
         file_check = supabase.table("source_files").select("id").eq(
             "id", file_id
         ).eq("user_id", current_user.id).execute()
@@ -76,15 +106,15 @@ async def generate_report(
     report_data = {
         "id": report_id,
         "created_by": current_user.id,
-        "title": request.title,
-        "custom_instructions": request.custom_instructions,
-        "detail_level": request.detail_level,
-        "output_formats": request.output_formats,
-        "slide_count_min": request.slide_count.min if request.slide_count else 10,
-        "slide_count_max": request.slide_count.max if request.slide_count else 15,
+        "title": body.title,
+        "custom_instructions": body.custom_instructions,
+        "detail_level": body.detail_level,
+        "output_formats": body.output_formats,
+        "slide_count_min": body.slide_count.min if body.slide_count else 10,
+        "slide_count_max": body.slide_count.max if body.slide_count else 15,
         "status": "pending",
         "progress": 0,
-        "source_files": [{"id": fid} for fid in request.source_file_ids],
+        "source_files": [{"id": fid} for fid in body.source_file_ids],
     }
 
     supabase.table("reports").insert(report_data).execute()
@@ -93,7 +123,7 @@ async def generate_report(
     # The report's source_files JSON contains the file IDs.
     # Files can be used in multiple reports without modification.
 
-    logger.info(f"[REPORT] Created report {report_id} with {len(request.source_file_ids)} source files")
+    logger.info(f"[REPORT] Created report {report_id} with {len(body.source_file_ids)} source files")
 
     # Start background generation
     background_tasks.add_task(
@@ -103,10 +133,10 @@ async def generate_report(
     )
 
     # Estimate time based on file count and detail level
-    estimated_time = len(request.source_file_ids) * 30  # 30 seconds per file base
-    if request.detail_level == "comprehensive":
+    estimated_time = len(body.source_file_ids) * 30  # 30 seconds per file base
+    if body.detail_level == "comprehensive":
         estimated_time *= 2
-    elif request.detail_level == "executive":
+    elif body.detail_level == "executive":
         estimated_time = int(estimated_time * 0.7)
 
     return GenerateReportResponse(
@@ -118,6 +148,7 @@ async def generate_report(
 
 async def run_report_generation(report_id: str, user_id: str):
     """Run report generation in background."""
+    gen_limiter = get_generation_limiter()
     try:
         generator = ReportGeneratorService()
         await generator.generate(report_id, user_id)
@@ -129,10 +160,18 @@ async def run_report_generation(report_id: str, user_id: str):
             "status": "failed",
             "error_message": str(e),
         }).eq("id", report_id).execute()
+    finally:
+        await gen_limiter.release()
+        logger.info(
+            f"[REPORT] Generation slot released for {report_id}. "
+            f"Active: {gen_limiter.active_count}/{settings.max_concurrent_generations}"
+        )
 
 
 @router.get("/{report_id}", response_model=ReportResponse)
+@limiter.limit("60/minute")
 async def get_report(
+    request: Request,
     current_user: CurrentUser,
     report_id: str,
 ):
@@ -153,7 +192,9 @@ async def get_report(
 
 
 @router.get("/{report_id}/status", response_model=ReportStatusResponse)
+@limiter.limit("60/minute")
 async def get_report_status(
+    request: Request,
     current_user: CurrentUser,
     report_id: str,
 ):
@@ -208,7 +249,9 @@ def get_step_description(status: str, progress: int) -> str:
 
 
 @router.get("", response_model=ReportListResponse)
+@limiter.limit("30/minute")
 async def list_reports(
+    request: Request,
     current_user: CurrentUser,
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
@@ -285,11 +328,13 @@ async def delete_report(
 
 
 @router.patch("/{report_id}/sections/{section_path:path}", response_model=EditSectionResponse)
+@limiter.limit("5/minute")
 async def edit_report_section(
+    request: Request,
     current_user: CurrentUser,
     report_id: str,
     section_path: str,
-    request: EditSectionRequest,
+    body: EditSectionRequest,
 ):
     """
     Edit a specific section of a report using LLM.
@@ -301,6 +346,20 @@ async def edit_report_section(
     - "key_findings" - edit key findings list
     - "recommendations" - edit recommendations list
     """
+    # --- Quota check (section edits count against monthly limit) ---
+    if not current_user.is_admin:
+        quota = get_quota_status(
+            current_user.id, current_user.monthly_report_limit, current_user.is_admin,
+        )
+        if quota.exceeded:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Monthly report limit reached ({quota.used}/{quota.limit}). "
+                    f"Section editing is disabled. Resets on {quota.resets_at[:10]}."
+                ),
+            )
+
     supabase = get_supabase_client()
 
     # Get report and verify ownership
@@ -354,7 +413,7 @@ Key Findings: {len(report_data.get('key_findings', []))} items"""
     new_content = llm_service.edit_section(
         section_title=section_title,
         section_content=old_content if isinstance(old_content, str) else str(old_content),
-        user_instructions=request.instructions,
+        user_instructions=body.instructions,
         report_context=report_context,
     )
 

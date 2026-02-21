@@ -1,6 +1,8 @@
 """Authentication routes."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.api.deps import CurrentUser
 from app.models.schemas import (
@@ -9,24 +11,27 @@ from app.models.schemas import (
     UserResponse,
     AuthResponse,
 )
+from app.services.quota import get_quota_status
 from app.services.supabase import get_supabase_client
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/signup", response_model=AuthResponse)
-async def signup(request: SignupRequest):
+@limiter.limit("5/minute")
+async def signup(request: Request, body: SignupRequest):
     """Register a new user."""
     supabase = get_supabase_client()
 
     try:
         # Create user with Supabase Auth
         auth_response = supabase.auth.sign_up({
-            "email": request.email,
-            "password": request.password,
+            "email": body.email,
+            "password": body.password,
             "options": {
                 "data": {
-                    "full_name": request.full_name,
+                    "full_name": body.full_name,
                 }
             }
         })
@@ -40,15 +45,15 @@ async def signup(request: SignupRequest):
         # Insert user record in users table
         supabase.table("users").insert({
             "id": auth_response.user.id,
-            "email": request.email,
-            "full_name": request.full_name,
+            "email": body.email,
+            "full_name": body.full_name,
         }).execute()
 
         return AuthResponse(
             user=UserResponse(
                 id=auth_response.user.id,
                 email=auth_response.user.email,
-                full_name=request.full_name,
+                full_name=body.full_name,
             ),
             access_token=auth_response.session.access_token if auth_response.session else None,
             refresh_token=auth_response.session.refresh_token if auth_response.session else None,
@@ -62,14 +67,15 @@ async def signup(request: SignupRequest):
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(request: LoginRequest):
+@limiter.limit("5/minute")
+async def login(request: Request, body: LoginRequest):
     """Login with email and password."""
     supabase = get_supabase_client()
 
     try:
         auth_response = supabase.auth.sign_in_with_password({
-            "email": request.email,
-            "password": request.password,
+            "email": body.email,
+            "password": body.password,
         })
 
         if not auth_response.user or not auth_response.session:
@@ -132,3 +138,19 @@ async def get_current_user_info(current_user: CurrentUser):
         email=current_user.email,
         full_name=user_data.data.get("full_name") if user_data.data else None,
     )
+
+
+@router.get("/quota")
+async def get_user_quota(current_user: CurrentUser):
+    """Get current user's quota status."""
+    quota = get_quota_status(
+        current_user.id, current_user.monthly_report_limit, current_user.is_admin,
+    )
+    return {
+        "used": quota.used,
+        "limit": quota.limit,
+        "remaining": quota.remaining,
+        "is_admin": quota.is_admin,
+        "exceeded": quota.exceeded,
+        "resets_at": quota.resets_at,
+    }
