@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useReportStore } from '../stores/reportStore'
+import { useAuthStore } from '../stores/authStore'
 import FileUploader from '../components/files/FileUploader'
 import FileList from '../components/files/FileList'
 import ReportConfigForm from '../components/reports/ReportConfigForm'
@@ -22,7 +23,13 @@ export default function NewReportPage() {
     isLoading,
   } = useReportStore()
 
+  const { quota, fetchQuota } = useAuthStore()
   const [step, setStep] = useState<Step>('upload')
+
+  // Fetch quota on mount and after generation completes
+  useEffect(() => {
+    fetchQuota()
+  }, [fetchQuota])
 
   // Transition to editing when generation completes
   useEffect(() => {
@@ -32,8 +39,11 @@ export default function NewReportPage() {
       currentReportId
     ) {
       setStep('editing')
+      fetchQuota() // Refresh quota after generation
     }
-  }, [step, generationStatus?.status, currentReportId])
+  }, [step, generationStatus?.status, currentReportId, fetchQuota])
+
+  const quotaExceeded = quota && !quota.is_admin && quota.exceeded
 
   const handleStartGeneration = async () => {
     try {
@@ -123,6 +133,33 @@ export default function NewReportPage() {
         </div>
       )}
 
+      {/* Quota indicator */}
+      {quota && !quota.is_admin && step !== 'editing' && (
+        <div
+          className={`mb-6 px-4 py-3 rounded-lg text-sm flex items-center justify-between ${
+            quota.exceeded
+              ? 'bg-red-50 border border-red-200 text-red-700'
+              : quota.remaining <= 1
+              ? 'bg-amber-50 border border-amber-200 text-amber-700'
+              : 'bg-blue-50 border border-blue-200 text-blue-700'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>
+              {quota.exceeded
+                ? `Monthly limit reached (${quota.used}/${quota.limit} reports). Resets ${new Date(quota.resets_at).toLocaleDateString()}.`
+                : `${quota.used}/${quota.limit} reports used this month`}
+            </span>
+          </div>
+          {!quota.exceeded && (
+            <span className="font-medium">{quota.remaining} remaining</span>
+          )}
+        </div>
+      )}
+
       {/* Step content */}
       <div className={`bg-white rounded-xl shadow-sm border border-gray-100 ${step === 'editing' ? '' : 'p-6'}`}>
         {step === 'upload' && (
@@ -155,10 +192,14 @@ export default function NewReportPage() {
               </button>
               <button
                 onClick={handleStartGeneration}
-                disabled={isLoading || selectedFiles.length === 0}
+                disabled={isLoading || selectedFiles.length === 0 || !!quotaExceeded}
                 className="px-6 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {isLoading ? 'Starting...' : 'Generate Report'}
+                {quotaExceeded
+                  ? 'Limit Reached'
+                  : isLoading
+                  ? 'Starting...'
+                  : 'Generate Report'}
               </button>
             </div>
           </div>

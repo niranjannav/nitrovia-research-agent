@@ -3,8 +3,12 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.config import get_settings
 from app.utils.logging import setup_logging
@@ -13,6 +17,11 @@ from app.utils.logging import setup_logging
 settings = get_settings()
 setup_logging(level=settings.log_level)
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Rate limiter (in-memory store — fine for single Railway instance)
+# ---------------------------------------------------------------------------
+limiter = Limiter(key_func=get_remote_address)
 
 
 def _configure_api_keys() -> None:
@@ -31,6 +40,8 @@ async def lifespan(app: FastAPI):
     # Startup
     _configure_api_keys()
     logger.info(f"Starting application in {settings.environment} mode")
+    logger.info(f"Max concurrent generations: {settings.max_concurrent_generations}")
+    logger.info(f"Default monthly report limit: {settings.default_monthly_report_limit}")
     yield
     # Shutdown
     logger.info("Shutting down application")
@@ -46,13 +57,17 @@ app = FastAPI(
     redoc_url="/redoc" if not settings.is_production else None,
 )
 
+# Attach rate limiter to app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Import and include routers
