@@ -20,3 +20,12 @@ export interface LoginRequest {
   email: string
   password: string
 }
+
+export interface QuotaStatus {
+  used: number
+  limit: number
+  remaining: number
+  is_admin: boolean
+  exceeded: boolean
+  resets_at: string
+}

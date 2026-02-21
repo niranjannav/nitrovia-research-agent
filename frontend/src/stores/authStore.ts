@@ -1,9 +1,11 @@
 import { create } from 'zustand'
 import { authService } from '../services/authService'
-import type { User, SignupRequest, LoginRequest } from '../types/auth'
+import api from '../services/api'
+import type { User, SignupRequest, LoginRequest, QuotaStatus } from '../types/auth'
 
 interface AuthState {
   user: User | null
+  quota: QuotaStatus | null
   isLoading: boolean
   error: string | null
 
@@ -12,11 +14,13 @@ interface AuthState {
   signIn: (data: LoginRequest) => Promise<void>
   signOut: () => Promise<void>
   checkAuth: () => Promise<void>
+  fetchQuota: () => Promise<void>
   clearError: () => void
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
+  quota: null,
   isLoading: true,
   error: null,
 
@@ -25,6 +29,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const user = await authService.signUp(data)
       set({ user, isLoading: false })
+      get().fetchQuota()
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Signup failed',
@@ -39,6 +44,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const user = await authService.signIn(data)
       set({ user, isLoading: false })
+      get().fetchQuota()
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Login failed',
@@ -51,7 +57,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   signOut: async () => {
     try {
       await authService.signOut()
-      set({ user: null })
+      set({ user: null, quota: null })
     } catch (error) {
       console.error('Sign out error:', error)
     }
@@ -62,8 +68,18 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const user = await authService.getCurrentUser()
       set({ user, isLoading: false })
+      if (user) get().fetchQuota()
     } catch {
       set({ user: null, isLoading: false })
+    }
+  },
+
+  fetchQuota: async () => {
+    try {
+      const response = await api.get<QuotaStatus>('/auth/quota')
+      set({ quota: response.data })
+    } catch (error) {
+      console.error('Failed to fetch quota:', error)
     }
   },
 

@@ -48,6 +48,9 @@ google-auth>=2.36.0
 python-multipart==0.0.20
 aiofiles==23.2.1
 
+# Rate Limiting
+slowapi==0.1.9
+
 # Testing
 pytest==8.3.0
 pytest-asyncio==0.24.0

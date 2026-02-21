@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     max_file_size_mb: int = 50
     max_files_per_report: int = 20
 
+    # Quota & Rate Limiting
+    default_monthly_report_limit: int = 3
+    max_concurrent_generations: int = 2
+    admin_emails: str = ""  # Comma-separated admin emails
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS origins from comma-separated string."""

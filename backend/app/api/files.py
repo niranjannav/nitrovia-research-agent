@@ -5,7 +5,9 @@ import math
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.api.deps import CurrentUser
 from app.config import get_settings
@@ -24,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 settings = get_settings()
+limiter = Limiter(key_func=get_remote_address)
 
 # Allowed file types
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".pptx"}
@@ -43,7 +46,9 @@ def get_file_extension(filename: str) -> str:
 
 
 @router.post("/upload", response_model=FileUploadResponse)
+@limiter.limit("10/minute")
 async def upload_file(
+    request: Request,
     current_user: CurrentUser,
     file: Annotated[UploadFile, File(description="File to upload")],
 ):
