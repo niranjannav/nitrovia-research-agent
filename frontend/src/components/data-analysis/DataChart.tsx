@@ -86,7 +86,7 @@ export default function DataChart({ title, chartType, data, xKey, yKeys }: DataC
                 dataKey="value"
                 nameKey={xKey}
                 label={({ name, percent }: { name?: string; percent?: number }) =>
-                  `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`
+                  `${name ?? ''}: ${((percent ?? 0) * 100).toFixed(0)}%`
                 }
               >
                 {data.map((_, index) => (
