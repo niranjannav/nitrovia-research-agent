@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, Component } from 'react'
+import type { ReactNode, ErrorInfo } from 'react'
 import {
   TamboProvider,
   useTambo,
   useTamboThreadInput,
-  TamboThreadInputProvider,
   ComponentRenderer,
 } from '@tambo-ai/react'
 import type { TamboThreadMessage, Content } from '@tambo-ai/react'
@@ -69,13 +69,13 @@ export default function DataAnalysisMode({ data, fileName, onBack }: DataAnalysi
         },
       ]}
     >
-      <TamboThreadInputProvider>
-        <div className="max-w-4xl mx-auto space-y-4">
-          <Header fileName={fileName} onBack={onBack} />
-          <DataPreview data={data} fileName={fileName} />
+      <div className="max-w-4xl mx-auto space-y-4">
+        <Header fileName={fileName} onBack={onBack} />
+        <DataPreview data={data} fileName={fileName} />
+        <ChatErrorBoundary>
           <ChatInterface />
-        </div>
-      </TamboThreadInputProvider>
+        </ChatErrorBoundary>
+      </div>
     </TamboProvider>
   )
 }
@@ -97,6 +97,42 @@ function Header({ fileName, onBack }: { fileName: string; onBack: () => void }) 
       </button>
     </div>
   )
+}
+
+class ChatErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[DataAnalysis] Chat error:', error, info)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">
+          <p className="font-medium">Something went wrong rendering the response</p>
+          <p className="mt-1 text-xs text-red-600">{this.state.error?.message}</p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="mt-2 px-3 py-1 text-xs bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }
 
 function ChatInterface() {

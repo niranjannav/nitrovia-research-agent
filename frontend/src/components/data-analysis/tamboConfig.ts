@@ -16,7 +16,7 @@ export const dataAnalysisComponents: TamboComponent[] = [
         .enum(['bar', 'line', 'pie'])
         .describe('Type of chart to render'),
       data: z
-        .array(z.record(z.string(), z.union([z.string(), z.number()])))
+        .array(z.unknown())
         .describe('Array of data objects for the chart'),
       xKey: z.string().describe('Key in data objects for the X axis / labels'),
       yKeys: z
@@ -33,12 +33,7 @@ export const dataAnalysisComponents: TamboComponent[] = [
       title: z.string().describe('Table title describing the filter/view'),
       headers: z.array(z.string()).describe('Column headers to display'),
       rows: z
-        .array(
-          z.record(
-            z.string(),
-            z.union([z.string(), z.number(), z.boolean(), z.null()])
-          )
-        )
+        .array(z.unknown())
         .describe('Array of row objects matching the headers'),
     }),
   },
