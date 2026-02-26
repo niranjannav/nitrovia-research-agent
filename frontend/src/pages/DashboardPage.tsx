@@ -107,30 +107,62 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick actions */}
-      <div className={`rounded-xl p-6 text-white ${
-        quota && !quota.is_admin && quota.exceeded
-          ? 'bg-gradient-to-r from-gray-500 to-gray-600'
-          : 'bg-gradient-to-r from-primary-600 to-primary-700'
-      }`}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">
-              {quota && !quota.is_admin && quota.exceeded
-                ? 'Monthly Limit Reached'
-                : 'Create a New Report'}
-            </h2>
-            <p className={quota && !quota.is_admin && quota.exceeded ? 'text-gray-200 mt-1' : 'text-primary-100 mt-1'}>
-              {quota && !quota.is_admin && quota.exceeded
-                ? `You've used all ${quota.limit} reports this month. Resets ${new Date(quota.resets_at).toLocaleDateString()}.`
-                : quota && !quota.is_admin
-                ? `${quota.remaining} of ${quota.limit} reports remaining this month`
-                : 'Upload your documents and generate professional reports'}
-            </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className={`rounded-xl p-6 text-white ${
+          quota && !quota.is_admin && quota.exceeded
+            ? 'bg-gradient-to-r from-gray-500 to-gray-600'
+            : 'bg-gradient-to-r from-primary-600 to-primary-700'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">
+                {quota && !quota.is_admin && quota.exceeded
+                  ? 'Monthly Limit Reached'
+                  : 'Create a New Report'}
+              </h2>
+              <p className={quota && !quota.is_admin && quota.exceeded ? 'text-gray-200 mt-1' : 'text-primary-100 mt-1'}>
+                {quota && !quota.is_admin && quota.exceeded
+                  ? `You've used all ${quota.limit} reports this month. Resets ${new Date(quota.resets_at).toLocaleDateString()}.`
+                  : quota && !quota.is_admin
+                  ? `${quota.remaining} of ${quota.limit} reports remaining this month`
+                  : 'Upload documents and generate professional reports'}
+              </p>
+            </div>
+            {(!quota || quota.is_admin || !quota.exceeded) && (
+              <Link
+                to="/reports/new"
+                className="inline-flex items-center px-6 py-3 bg-white text-primary-600 font-medium rounded-lg hover:bg-primary-50 transition-colors"
+              >
+                <svg
+                  className="w-5 h-5 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+                New Report
+              </Link>
+            )}
           </div>
-          {(!quota || quota.is_admin || !quota.exceeded) && (
+        </div>
+
+        <div className="rounded-xl p-6 text-white bg-gradient-to-r from-green-600 to-emerald-700">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Data Analysis</h2>
+              <p className="text-green-100 mt-1">
+                Upload an Excel file and chat with your data using AI
+              </p>
+            </div>
             <Link
-              to="/reports/new"
-              className="inline-flex items-center px-6 py-3 bg-white text-primary-600 font-medium rounded-lg hover:bg-primary-50 transition-colors"
+              to="/data-analysis"
+              className="inline-flex items-center px-6 py-3 bg-white text-green-600 font-medium rounded-lg hover:bg-green-50 transition-colors"
             >
               <svg
                 className="w-5 h-5 mr-2"
@@ -142,12 +174,12 @@ export default function DashboardPage() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M12 4v16m8-8H4"
+                  d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                 />
               </svg>
-              New Report
+              Analyze Data
             </Link>
-          )}
+          </div>
         </div>
       </div>
 

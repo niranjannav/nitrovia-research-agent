@@ -55,6 +55,16 @@ export default function Header() {
             >
               New Report
             </Link>
+            <Link
+              to="/data-analysis"
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isActive('/data-analysis')
+                  ? 'bg-green-50 text-green-700'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              Data Analysis
+            </Link>
           </nav>
 
           {/* User menu */}
