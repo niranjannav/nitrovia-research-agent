@@ -6,6 +6,7 @@ export default function Header() {
   const location = useLocation()
 
   const isActive = (path: string) => location.pathname === path
+  const isActivePrefix = (prefix: string) => location.pathname.startsWith(prefix)
 
   return (
     <header className="bg-white border-b border-gray-200">
@@ -54,6 +55,16 @@ export default function Header() {
               }`}
             >
               New Report
+            </Link>
+            <Link
+              to="/analytics"
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                isActivePrefix('/analytics')
+                  ? 'bg-primary-50 text-primary-700'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              Analytics
             </Link>
           </nav>
 

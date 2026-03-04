@@ -1,0 +1,74 @@
+You are an expert sales analyst for a dairy company (SMILK). Generate a comprehensive, data-driven {domain} analytics report based on the structured metrics below.
+
+Report period: {report_period} ending {as_of_date}
+Primary metric: {primary_metric}
+Charts embedded in report: {chart_names}
+Additional instructions: {custom_instructions}
+
+## STRUCTURED METRICS (use these exact numbers — do NOT invent data)
+```json
+{metrics_json}
+```
+
+## REPORT REQUIREMENTS
+
+Produce a structured analytical report with the following sections. Reference exact figures from the metrics JSON above.
+
+### 1. Executive Summary
+- Top 3-5 headline numbers (revenue, litres, key % changes)
+- Overall business health assessment (1-2 sentences)
+- Most critical insight for leadership
+
+### 2. Sales Performance Overview
+Cover ALL of the following comparisons where data is available:
+- **WoW (Week-on-Week)**: This week vs last week — revenue and litres
+- **SWLM (Same Week Last Month)**: This week vs same week in previous month
+- **Month-to-Date**: Current MTD vs same period last month
+- **MoM (Month-on-Month)**: This full month vs previous month
+- **SMLY (Same Month Last Year)**: This month vs same month last year
+- **YTD vs Same Period Last Year**: Year-to-date comparison
+- **QoQ (Quarter-on-Quarter)**: This quarter vs last quarter
+- **SQLY (Same Quarter Last Year)**: This quarter vs Q same quarter last year
+
+For each comparison: state the current value, previous value, absolute change, and % change. Highlight whether the direction is positive or negative for the business.
+
+### 3. Channel Analysis
+Analyse the four primary channels: **Dealers, POS, Firm, HMD** (plus Wholesale and Export if present).
+- Which channels are growing vs declining (MoM)?
+- Which channel has the largest share of revenue?
+- Which channel shows the most concerning trend?
+- Channel mix shift: has the portfolio shifted compared to the prior period?
+
+### 4. Team Performance
+- Which sales reps / teams showed the strongest growth?
+- Which reps / teams showed a decline? By how much?
+- Are there outliers (exceptionally high or low performers)?
+- Link team performance to channel results where applicable
+
+### 5. Product Performance
+- **Top 10 products** by revenue this period (list with values)
+- **Products that grew** (MoM): list top 5 growers with % change
+- **Products that declined** (MoM): list top 5 decliners with % change
+- **Bottom performers**: products with lowest revenue — are they worth retaining?
+- Category-level trends if data supports it
+
+### 6. Trend Analysis
+- Describe the revenue/litres trend over the past 12-24 months
+- Identify any seasonal patterns
+- Identify inflection points (sharp rises or falls) and likely causes
+
+### 7. Recommendations
+Provide at least **6 specific, actionable recommendations** based on the data:
+- Each recommendation must reference a specific metric or trend from the data
+- Include WHO should act, WHAT they should do, and WHY (the data reason)
+- Prioritise by potential impact (High / Medium / Low)
+- At least 2 recommendations must address declining channels or products
+- At least 1 recommendation must address team/rep performance
+- At least 1 recommendation must be about capitalising on a growing trend
+
+## FORMAT RULES
+- Use precise numbers from the metrics JSON (e.g. "Revenue was TZS 4,231,500, up 12.3% WoW")
+- If a comparison is unavailable (null in JSON), state "insufficient data for this comparison"
+- Be direct and business-focused — avoid padding or generic statements
+- Sections should flow logically; use sub-headings within sections as needed
+- Recommendations must be actionable within 30 days by the sales team

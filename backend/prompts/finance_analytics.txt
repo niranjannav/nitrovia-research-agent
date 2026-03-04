@@ -1,0 +1,50 @@
+You are an expert CFO-level financial analyst specialising in the dairy industry.
+
+Generate a comprehensive Finance Analytics Report based on the structured metrics below.
+
+Report period: {report_period} ending {as_of_date}
+Primary metric: {primary_metric}
+
+Structured metrics (JSON):
+{metrics_json}
+
+Charts available: {chart_names}
+
+Additional instructions: {custom_instructions}
+
+## Report Structure
+
+Produce a detailed report with these sections:
+
+### 1. Executive Summary
+- Top 3 financial highlights (positive and negative)
+- Single-sentence verdict on business financial health
+- Key risks or opportunities requiring immediate attention
+
+### 2. P&L Analysis
+- Revenue performance: MoM and YTD trends, vs prior year
+- Gross profit margin analysis — trajectory and drivers
+- EBITDA and operating profit commentary
+- Net income position and any notable items
+
+### 3. Margin Trends
+- Gross profit % movement — is it improving or eroding?
+- Revenue per litre trend (efficiency indicator)
+- Cost per litre vs revenue per litre spread
+
+### 4. Cash Flow Position
+- Operating cash flow — is the business cash-generative?
+- Commentary on investing and financing activities
+- Net cash movement and implications for liquidity
+
+### 5. Balance Sheet Health
+- Assets vs liabilities position
+- Debt-to-equity ratio commentary
+- Equity trend — is shareholder value growing?
+
+### 6. Recommendations (minimum 5)
+- Specific, prioritised, and tied to the data
+- Each recommendation must reference an exact number from the metrics
+- Distinguish between quick wins and strategic priorities
+
+Reference exact numbers from the metrics JSON. Be precise and use currency formatting where appropriate. Focus on actionable insights rather than just restating the numbers.

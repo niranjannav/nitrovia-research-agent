@@ -8,6 +8,7 @@ import DashboardPage from './pages/DashboardPage'
 import NewReportPage from './pages/NewReportPage'
 import ReportHistoryPage from './pages/ReportHistoryPage'
 import ReportViewPage from './pages/ReportViewPage'
+import AnalyticsPage from './pages/AnalyticsPage'
 
 function App() {
   const { checkAuth, isLoading } = useAuthStore()
@@ -34,6 +35,10 @@ function App() {
           <Route path="/reports/new" element={<NewReportPage />} />
           <Route path="/reports" element={<ReportHistoryPage />} />
           <Route path="/reports/:reportId" element={<ReportViewPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          {/* Legacy redirects */}
+          <Route path="/analytics/upload" element={<Navigate to="/analytics" replace />} />
+          <Route path="/analytics/reports/new" element={<Navigate to="/analytics" replace />} />
         </Route>
       </Route>
 

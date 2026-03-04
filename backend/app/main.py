@@ -71,12 +71,14 @@ app.add_middleware(
 )
 
 # Import and include routers
-from app.api import auth, files, health, reports  # noqa: E402
+from app.api import analytics, auth, chat, files, health, reports  # noqa: E402
 
 app.include_router(health.router, tags=["Health"])
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(files.router, prefix="/files", tags=["Files"])
 app.include_router(reports.router, prefix="/reports", tags=["Reports"])
+app.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
+app.include_router(chat.router, prefix="/chat", tags=["Chat"])
 
 
 @app.get("/")
