@@ -39,6 +39,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager for startup/shutdown events."""
     # Startup
     _configure_api_keys()
+
+    # Initialize runtime mode (production vs dev)
+    from app.services.mode_manager import init_mode
+    init_mode()
+
     logger.info(f"Starting application in {settings.environment} mode")
     logger.info(f"Max concurrent generations: {settings.max_concurrent_generations}")
     logger.info(f"Default monthly report limit: {settings.default_monthly_report_limit}")
@@ -71,9 +76,10 @@ app.add_middleware(
 )
 
 # Import and include routers
-from app.api import analytics, auth, chat, files, health, reports  # noqa: E402
+from app.api import analytics, auth, chat, config_api, files, health, reports  # noqa: E402
 
 app.include_router(health.router, tags=["Health"])
+app.include_router(config_api.router, tags=["Configuration"])
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(files.router, prefix="/files", tags=["Files"])
 app.include_router(reports.router, prefix="/reports", tags=["Reports"])

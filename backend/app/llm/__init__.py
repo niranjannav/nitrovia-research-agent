@@ -32,6 +32,7 @@ Example usage:
 
 from .config import (
     DEFAULT_ROUTING_TABLE,
+    DEV_ROUTING_TABLE,
     MODEL_CONFIGS,
     GatewayConfig,
     ModelConfig,
@@ -56,6 +57,7 @@ __all__ = [
     "TaskType",
     "MODEL_CONFIGS",
     "DEFAULT_ROUTING_TABLE",
+    "DEV_ROUTING_TABLE",
     # Gateway
     "ModelGateway",
     "GenerationResult",

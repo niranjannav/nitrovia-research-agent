@@ -105,6 +105,17 @@ DEFAULT_ROUTING_TABLE: dict[TaskType, list[str]] = {
     TaskType.RESEARCH: ["claude-sonnet-4", "claude-3-5-haiku"],
 }
 
+# Dev routing table: uses Haiku for ALL tasks to save costs during development.
+DEV_ROUTING_TABLE: dict[TaskType, list[str]] = {
+    TaskType.SUMMARIZATION: ["claude-3-5-haiku"],
+    TaskType.REPORT_GENERATION: ["claude-3-5-haiku"],
+    TaskType.PRESENTATION_GEN: ["claude-3-5-haiku"],
+    TaskType.SECTION_EDIT: ["claude-3-5-haiku"],
+    TaskType.CLASSIFICATION: ["claude-3-5-haiku"],
+    TaskType.SKILL_PLANNING: ["claude-3-5-haiku"],
+    TaskType.RESEARCH: ["claude-3-5-haiku"],
+}
+
 
 @dataclass
 class GatewayConfig:
@@ -133,10 +144,15 @@ class GatewayConfig:
     routing_table: Optional[dict[TaskType, list[str]]] = None
 
     def get_routing_table(self) -> dict[TaskType, list[str]]:
-        """Get the effective routing table."""
+        """Get the effective routing table based on current mode."""
         if self.routing_table:
             return self.routing_table
-        return DEFAULT_ROUTING_TABLE
+        # Check runtime mode to decide which routing table to use
+        from app.services.mode_manager import is_production_mode
+
+        if is_production_mode():
+            return DEFAULT_ROUTING_TABLE
+        return DEV_ROUTING_TABLE
 
     def get_available_providers(self) -> set[Provider]:
         """Get set of providers with configured API keys."""

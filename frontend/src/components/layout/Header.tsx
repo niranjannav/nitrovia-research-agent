@@ -1,9 +1,16 @@
 import { Link, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuthStore } from '../../stores/authStore'
+import { useConfigStore } from '../../stores/configStore'
 
 export default function Header() {
   const { user, signOut } = useAuthStore()
+  const { productionMode, devToggleAvailable, modelTier, isLoading, fetchMode, toggleMode } = useConfigStore()
   const location = useLocation()
+
+  useEffect(() => {
+    fetchMode()
+  }, [fetchMode])
 
   const isActive = (path: string) => location.pathname === path
   const isActivePrefix = (prefix: string) => location.pathname.startsWith(prefix)
@@ -70,6 +77,37 @@ export default function Header() {
 
           {/* User menu */}
           <div className="flex items-center space-x-4">
+            {/* Production / Dev mode toggle */}
+            {devToggleAvailable && !isLoading && (
+              <div className="flex items-center space-x-2">
+                <span className={`text-xs font-medium ${productionMode ? 'text-gray-400' : 'text-amber-600'}`}>
+                  Dev
+                </span>
+                <button
+                  onClick={toggleMode}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 ${
+                    productionMode ? 'bg-primary-600' : 'bg-amber-400'
+                  }`}
+                  title={productionMode ? 'Production mode (Sonnet)' : 'Dev mode (Haiku)'}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      productionMode ? 'translate-x-[1.125rem]' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+                <span className={`text-xs font-medium ${productionMode ? 'text-primary-700' : 'text-gray-400'}`}>
+                  Prod
+                </span>
+                <span className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                  productionMode
+                    ? 'bg-primary-50 text-primary-700'
+                    : 'bg-amber-50 text-amber-700'
+                }`}>
+                  {modelTier}
+                </span>
+              </div>
+            )}
             <span className="text-sm text-gray-600">{user?.email}</span>
             <button
               onClick={() => signOut()}

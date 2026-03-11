@@ -29,8 +29,12 @@ class ModelRouter:
             config: Gateway configuration with API keys and routing table
         """
         self.config = config
-        self.routing_table = config.get_routing_table()
         self.available_providers = config.get_available_providers()
+
+    @property
+    def routing_table(self) -> dict:
+        """Get current routing table (re-evaluated on each access for mode switching)."""
+        return self.config.get_routing_table()
 
     def get_model(
         self, task: TaskType, fallback_tier: int = 0

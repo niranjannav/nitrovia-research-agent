@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
+    # Dev Mode: uses cheap Haiku models. Remove or set False for production.
+    dev_mode: bool = False
+
     # Supabase
     supabase_url: str
     supabase_anon_key: str
